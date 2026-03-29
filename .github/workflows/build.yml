@@ -43,10 +43,25 @@ jobs:
           CGO_ENABLED: 0
         run: go build -ldflags="-s -w" -o ghs${{ matrix.suffix }} .
 
+      - name: Package Windows zip
+        if: matrix.goos == 'windows'
+        run: |
+          mkdir -p ghs-windows-${{ matrix.goarch }}
+          cp ghs.exe ghs-windows-${{ matrix.goarch }}/
+          cp install.bat install-ghs.ps1 uninstall.bat ghs-windows-${{ matrix.goarch }}/
+          cd ghs-windows-${{ matrix.goarch }} && zip ../ghs-windows-${{ matrix.goarch }}.zip *
+
       - uses: actions/upload-artifact@v4
+        if: matrix.goos != 'windows'
         with:
           name: ghs-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ghs${{ matrix.suffix }}
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.goos == 'windows'
+        with:
+          name: ghs-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ghs-windows-${{ matrix.goarch }}.zip
 
   release:
     needs: build
