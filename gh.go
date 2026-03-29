@@ -108,8 +108,21 @@ func ghGetRepoURL() (string, error) {
 	return ghExec("repo", "view", "--json", "url", "-q", ".url")
 }
 
-// ghImportHosts reads gh CLI hosts.yml directly and returns info for all
-// authenticated hosts. gh stores multiple accounts as github.com, github.com-2, etc.
+// ghImportHosts reads gh CLI hosts.yml and returns info for all authenticated accounts.
+// Supports both old flat format and new multi-account nested format:
+//
+//	Old format:
+//	  github.com:
+//	    user: octocat
+//	    oauth_token: gho_xxx
+//
+//	New multi-account format:
+//	  github.com:
+//	    git_protocol: https
+//	    users:
+//	      user1:
+//	      user2:
+//	    user: user1  (active)
 func ghImportHosts() ([]GhHostInfo, error) {
 	cfgDir := ghconfig.ConfigDir()
 	hostsFile := filepath.Join(cfgDir, "hosts.yml")
@@ -122,50 +135,86 @@ func ghImportHosts() ([]GhHostInfo, error) {
 		return nil, err
 	}
 
-	// Parse YAML directly — each top-level key is a hostname entry:
-	//   github.com:
-	//     user: octocat
-	//     oauth_token: gho_xxx
-	//   github.com-2:
-	//     user: user2
-	//     oauth_token: gho_yyy
-	var hosts map[string]map[string]string
+	var hosts map[string]interface{}
 	if err := yaml.Unmarshal(data, &hosts); err != nil {
 		return nil, fmt.Errorf("cannot parse %s: %w", hostsFile, err)
 	}
 
 	var result []GhHostInfo
-	for host, entry := range hosts {
+
+	for host, raw := range hosts {
 		if !strings.Contains(host, "github.com") {
 			continue
 		}
-
-		user := entry["user"]
-		if user == "" {
+		entry, ok := raw.(map[string]interface{})
+		if !ok {
 			continue
 		}
 
-		// Try token from config file first (PAT tokens stored here)
-		token := entry["oauth_token"]
-
-		// If not in file, try keyring/env via go-gh
-		if token == "" {
-			token, _ = auth.TokenForHost(host)
+		// Get active username
+		activeUser := ""
+		if v, ok := entry["user"].(string); ok {
+			activeUser = v
 		}
 
-		// Last resort: call gh CLI directly
-		if token == "" {
-			if out, err := ghExec("auth", "token", "--hostname", host); err == nil {
-				token = strings.TrimSpace(out)
+		// Collect all usernames from "users" field (new multi-account format)
+		var usernames []string
+		if usersRaw, ok := entry["users"]; ok {
+			switch v := usersRaw.(type) {
+			case map[string]interface{}:
+				for u := range v {
+					usernames = append(usernames, u)
+				}
+			case []interface{}:
+				for _, u := range v {
+					if s, ok := u.(string); ok {
+						usernames = append(usernames, s)
+					}
+				}
 			}
 		}
 
-		if token != "" {
-			result = append(result, GhHostInfo{
-				Host:  host,
-				User:  user,
-				Token: token,
-			})
+		// Fallback: old single-user format (flat "user" + "oauth_token")
+		if len(usernames) == 0 && activeUser != "" {
+			// Try to get token from oauth_token field directly (old format)
+			token := ""
+			if v, ok := entry["oauth_token"].(string); ok && v != "" {
+				token = v
+			}
+			if token != "" {
+				result = append(result, GhHostInfo{Host: host, User: activeUser, Token: token})
+				continue
+			}
+			// No oauth_token in file, try keyring
+			usernames = []string{activeUser}
+		}
+
+		// Get active user's token (no switch needed)
+		activeToken, _ := auth.TokenForHost(host)
+
+		switched := false
+		for _, user := range usernames {
+			if user == "" {
+				continue
+			}
+			var token string
+			if user == activeUser {
+				token = activeToken
+			} else {
+				// Temporarily switch to get this user's token from keyring
+				if _, err := ghExec("auth", "switch", "--user", user); err == nil {
+					token, _ = auth.TokenForHost(host)
+					switched = true
+				}
+			}
+			if token != "" {
+				result = append(result, GhHostInfo{Host: host, User: user, Token: token})
+			}
+		}
+
+		// Restore original active user if we switched
+		if switched && activeUser != "" {
+			ghExec("auth", "switch", "--user", activeUser)
 		}
 	}
 
