@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"runtime"
 	"strings"
 )
 
@@ -58,22 +57,18 @@ func shortRef(ref string) string {
 }
 
 func printUsage() {
-	prog := "ghs"
-	if runtime.GOOS == "windows" {
-		prog = "ghs.exe"
-	}
 	fmt.Printf(`ghs - Git & GitHub account switcher v%s
 
 Usage:
-  %s add <alias> [flags]       Add account (auto-imports gh token)
-  %s import [--force]          Import accounts from gh CLI
-  %s remove <alias>            Remove saved account
-  %s use <alias>               Switch git/gh to account
-  %s list                      List saved accounts
-  %s whoami                    Show current git/gh identity
-  %s undo [flags]              Undo commits by wrong author
-  %s push [flags]              Push (auto-create repo if needed)
-  %s fix <alias> [flags]       Undo + switch in one step
+  ghs add <alias> [flags]       Add account (auto-imports gh token)
+  ghs import [--force]          Import accounts from gh CLI
+  ghs remove <alias>            Remove saved account
+  ghs use <alias>               Switch git/gh to account
+  ghs list                      List saved accounts
+  ghs whoami                    Show current git/gh identity
+  ghs undo [flags]              Undo commits by wrong author
+  ghs push [flags]              Push (auto-create repo if needed)
+  ghs fix <alias> [flags]       Undo + switch in one step
 
 Flags for 'add':
   -n, --name <name>            Author name (default: current git config)
@@ -90,13 +85,12 @@ Flags for 'undo' and 'fix':
   -y, --yes                    Skip confirmation
 
 Examples:
-  %s add work -n "Jane" -e jane@company.com
-  %s add personal              # imports current gh token automatically
-  %s import                    # import all gh CLI accounts
-  %s fix work -y               # undo wrong commits + switch to work
-  %s push                      # push, create repo if needed
-`, version, prog, prog, prog, prog, prog, prog, prog, prog,
-		prog, prog, prog, prog, prog)
+  ghs add work -n "Jane" -e jane@company.com
+  ghs add personal              # imports current gh token automatically
+  ghs import                    # import all gh CLI accounts
+  ghs fix work -y               # undo wrong commits + switch to work
+  ghs push                      # push, create repo if needed
+`, version)
 }
 
 // extractAlias separates the first non-flag argument from flags.

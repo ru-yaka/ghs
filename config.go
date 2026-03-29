@@ -269,6 +269,22 @@ func importGhAccounts(overwrite bool) error {
 	}
 	fmt.Printf("\nImported %d account(s).\n", imported)
 
+	// Auto-switch: if active gh user differs from current git identity, offer to switch
+	if ghIsInstalled() {
+		if activeGhUser, err := ghGetUser(); err == nil && activeGhUser != "" {
+			if _, curEmail, _ := getCurrentUser(); curEmail != activeGhUser+"@users.noreply.github.com" {
+				if acc, ok := cfg.Accounts[activeGhUser]; ok {
+					fmt.Printf("\nActive gh user is '%s' but git identity differs.\n", activeGhUser)
+					if confirm("Switch git to match?") {
+						gitConfigSet("user.name", acc.Name)
+						gitConfigSet("user.email", acc.Email)
+						printSuccess("git → %s <%s>", acc.Name, acc.Email)
+					}
+				}
+			}
+		}
+	}
+
 	// Show hint about setting proper name/email
 	fmt.Println("\nTip: Edit accounts with proper git name/email:")
 	fmt.Println("  ghs add <alias> -n \"Your Name\" -e your@email.com")

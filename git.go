@@ -21,7 +21,7 @@ func gitExec(args ...string) (string, error) {
 }
 
 func gitConfigSet(key, value string) error {
-	_, err := gitExec("config", key, value)
+	_, err := gitExec("config", "--global", key, value)
 	return err
 }
 
