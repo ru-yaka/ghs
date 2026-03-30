@@ -19,8 +19,8 @@ CLI tool to switch between git identities (user.name, user.email) and GitHub acc
 All alias arguments (`use`, `remove`, `fix`) support fuzzy matching — prefix and substring:
 
 ```
-ghs use nick       # matches nickkillie
-ghs remove ru      # matches ru-yaka
+ghs use work       # matches work-laptop
+ghs remove pers    # matches personal
 ```
 
 ## Install
