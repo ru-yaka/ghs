@@ -16,6 +16,13 @@ CLI tool to switch between git identities (user.name, user.email) and GitHub acc
 | `ghs fix <alias> [--all] [--last N] [-y]` | Undo + switch in one step |
 | `ghs push [--public] [-r remote]` | Push; auto-create GitHub repo if no remote |
 
+All alias arguments (`use`, `remove`, `fix`) support fuzzy matching — prefix and substring:
+
+```
+ghs use nick       # matches nickkillie
+ghs remove ru      # matches ru-yaka
+```
+
 ## Install
 
 Download from [GitHub Releases](https://github.com/ru-yaka/ghs/releases).
