@@ -158,33 +158,75 @@ func removeAccount(alias string) error {
 		return fmt.Errorf("alias is required")
 	}
 
+	resolved, err := resolveAlias(alias)
+	if err != nil {
+		return err
+	}
+
 	cfg, err := loadConfig()
 	if err != nil {
 		return err
 	}
 
-	if _, ok := cfg.Accounts[alias]; !ok {
-		return fmt.Errorf("account '%s' not found", alias)
-	}
-
-	delete(cfg.Accounts, alias)
+	delete(cfg.Accounts, resolved)
 	if err := saveConfig(cfg); err != nil {
 		return err
 	}
 
-	fmt.Printf("  ✓ Account '%s' removed\n", alias)
+	fmt.Printf("  ✓ Account '%s' removed\n", resolved)
 	return nil
 }
 
+func resolveAlias(input string) (string, error) {
+	cfg, err := loadConfig()
+	if err != nil {
+		return "", err
+	}
+
+	// Exact match
+	if _, ok := cfg.Accounts[input]; ok {
+		return input, nil
+	}
+
+	input = strings.ToLower(input)
+	var prefixMatches []string
+	var substrMatches []string
+
+	for alias := range cfg.Accounts {
+		lower := strings.ToLower(alias)
+		if strings.HasPrefix(lower, input) {
+			prefixMatches = append(prefixMatches, alias)
+		} else if strings.Contains(lower, input) {
+			substrMatches = append(substrMatches, alias)
+		}
+	}
+
+	if len(prefixMatches) == 1 {
+		return prefixMatches[0], nil
+	}
+	if len(prefixMatches) > 1 {
+		return "", fmt.Errorf("'%s' matches multiple accounts: %s", input, strings.Join(prefixMatches, ", "))
+	}
+	if len(substrMatches) == 1 {
+		return substrMatches[0], nil
+	}
+	if len(substrMatches) > 1 {
+		return "", fmt.Errorf("'%s' matches multiple accounts: %s", input, strings.Join(substrMatches, ", "))
+	}
+
+	return "", fmt.Errorf("account '%s' not found. Run 'ghs add %s' first", input, input)
+}
+
 func getAccount(alias string) (*Account, error) {
+	resolved, err := resolveAlias(alias)
+	if err != nil {
+		return nil, err
+	}
 	cfg, err := loadConfig()
 	if err != nil {
 		return nil, err
 	}
-	acc, ok := cfg.Accounts[alias]
-	if !ok {
-		return nil, fmt.Errorf("account '%s' not found. Run 'ghs add %s' first", alias, alias)
-	}
+	acc := cfg.Accounts[resolved]
 	return &acc, nil
 }
 
