@@ -270,10 +270,6 @@ func cmdFix(args []string) error {
 
 	// Force push
 	if hasUpstream() {
-		branch, err := getCurrentBranch()
-		if err != nil {
-			return fmt.Errorf("cannot get current branch: %w", err)
-		}
 		upstream, _ := gitExec("rev-parse", "--abbrev-ref", "@{u}")
 		printInfo("force pushing to %s...", upstream)
 		if _, err := gitExec("push", "--force-with-lease"); err != nil {
