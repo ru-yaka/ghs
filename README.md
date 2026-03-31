@@ -12,10 +12,8 @@ CLI tool to switch between git identities (user.name, user.email) and GitHub acc
 | `ghs use <alias>` | Switch git + gh auth to this account |
 | `ghs list` | Show saved accounts |
 | `ghs whoami` | Show current git/gh identity + branch |
-| `ghs undo [--all] [--last N] [-y]` | Soft-reset wrong-author commits, keep changes staged |
-| `ghs rewrite <alias> [--all] [--last N] [-y]` | Rewrite commit authors, preserve history (requires force push) |
-| `ghs fix <alias> [--all] [--last N] [-y]` | Undo + switch in one step |
-| `ghs push [--public] [-r remote]` | Push; auto-create GitHub repo if no remote |
+| `ghs fix <alias>` | Rewrite all commits to this account + force push |
+| `ghs push [--public]` | Push; auto-create GitHub repo if no remote |
 
 All alias arguments (`use`, `remove`, `fix`) support fuzzy matching — prefix and substring:
 
@@ -48,7 +46,7 @@ GOOS=darwin GOARCH=arm64 go build -o ghs .
 ## Architecture
 
 ```
-main.go     CLI entry point, command routing, undo/fix/push logic
+main.go     CLI entry point, command routing, fix/push logic
 config.go   Account CRUD, ~/.ghs/config.json, import from gh CLI
 git.go      Git operations (config, commits, reset, push)
 gh.go       GitHub CLI operations (auth, token, repo create, hosts.yml parsing)
@@ -61,7 +59,7 @@ Key design decisions:
 - **`~/.ghs/config.json`** — stores accounts as `{name, email, token, gh_user}` per alias
 - **`<git-dir>/ghs-account`** — per-repo default account marker, set after `ghs use`
 - **Token import** — parses gh CLI's `hosts.yml` (both old flat and new multi-account format); for multi-account, temporarily `gh auth switch`es to read inactive tokens from OS keyring, then restores original active user
-- **Undo** — soft-resets to upstream (default), oldest wrong commit's parent, or empty state if all commits are wrong
+- **`ghs fix`** — uses `git filter-branch` to rewrite all commit authors, then force pushes
 
 ## Dependencies
 

@@ -30,14 +30,10 @@ func main() {
 		os.Exit(0)
 	case "import":
 		err = cmdImport(args)
-	case "undo":
-		err = cmdUndo(args)
 	case "push":
 		err = cmdPush(args)
 	case "fix":
 		err = cmdFix(args)
-	case "rewrite":
-		err = cmdRewrite(args)
 	case "help", "--help", "-h":
 		printUsage()
 	case "version", "--version", "-v":
@@ -176,158 +172,119 @@ func cmdWhoami() {
 	}
 }
 
-// cmdUndo handles: ghs undo [--all] [--last N] [-y]
-func cmdUndo(args []string) error {
-	fs := flag.NewFlagSet("undo", flag.ExitOnError)
-	all := fs.Bool("all", false, "All commits")
-	lastN := fs.Int("last", 0, "Only last N commits")
-	yes := fs.Bool("y", false, "Skip confirmation")
-	fs.Parse(args)
-
-	return doUndo("", *all, *lastN, *yes)
-}
-
-// cmdFix handles: ghs fix <alias> [--all] [--last N] [-y]
+// cmdFix handles: ghs fix <alias>
+// Rewrites all commit authors and force pushes.
 func cmdFix(args []string) error {
-	fs := flag.NewFlagSet("fix", flag.ExitOnError)
-	all := fs.Bool("all", false, "All commits")
-	lastN := fs.Int("last", 0, "Only last N commits")
-	yes := fs.Bool("y", false, "Skip confirmation")
-
-	alias, flagArgs := extractAlias(args)
-	if alias == "" {
-		fmt.Println("Usage: ghs fix <alias> [--all] [--last N] [-y]")
-		return fmt.Errorf("alias is required")
+	if len(args) == 0 {
+		return fmt.Errorf("usage: ghs fix <alias>")
 	}
-	fs.Parse(flagArgs)
+	alias := args[0]
 
 	acc, err := getAccount(alias)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("Fix: undo wrong commits → switch to '%s' (%s <%s>)\n\n", alias, acc.Name, acc.Email)
-
-	curName, curEmail, _ := getCurrentUser()
-	if curName != "" {
-		fmt.Printf("  Current: %s <%s>\n", curName, curEmail)
-	}
-	fmt.Printf("  Target:  %s <%s>\n\n", acc.Name, acc.Email)
-
-	if err := doUndo(acc.Email, *all, *lastN, *yes); err != nil {
-		return err
-	}
-
-	fmt.Println()
-	return cmdUse([]string{alias})
-}
-
-// doUndo is the core undo logic.
-// correctEmail: non-empty = commits NOT matching are wrong (used by `fix`).
-// Empty = commits by current user are wrong (standalone `undo`).
-func doUndo(correctEmail string, allCommits bool, lastN int, skipConfirm bool) error {
-	var commits []Commit
-	var err error
-	var base string
-
-	if allCommits {
-		commits, err = getCommits("")
-		base = "all commits"
-	} else if lastN > 0 {
-		commits, err = getCommits(fmt.Sprintf("-n%d", lastN))
-		base = fmt.Sprintf("last %d commits", lastN)
-	} else if hasUpstream() {
-		commits, err = getCommits("@{u}..HEAD")
-		base = "unpushed commits"
-	} else {
-		commits, err = getCommits("")
-		base = "all commits (no upstream)"
-	}
-
+	// Get all commits
+	commits, err := getCommits("")
 	if err != nil {
 		return fmt.Errorf("cannot get commits: %w", err)
 	}
 	if len(commits) == 0 {
-		printInfo("no commits to undo")
+		printInfo("no commits to fix")
 		return nil
 	}
 
-	// Determine which email is "wrong"
-	var wrongEmail string
-	if correctEmail == "" {
-		_, curEmail, _ := getCurrentUser()
-		wrongEmail = curEmail
-	}
-
+	// Find commits with wrong author
 	var wrongCommits []Commit
 	for _, c := range commits {
-		if wrongEmail != "" {
-			if c.AuthorEmail == wrongEmail {
-				wrongCommits = append(wrongCommits, c)
-			}
-		} else {
-			if c.AuthorEmail != correctEmail {
-				wrongCommits = append(wrongCommits, c)
-			}
+		if c.AuthorEmail != acc.Email {
+			wrongCommits = append(wrongCommits, c)
 		}
 	}
 
 	if len(wrongCommits) == 0 {
-		printInfo("no wrong commits found in %d %s", len(commits), base)
-		return nil
+		printInfo("all commits already have correct author")
+		return cmdUse([]string{alias})
 	}
 
-	fmt.Printf("Found %d commit(s) to undo (out of %d %s):\n\n", len(wrongCommits), len(commits), base)
+	fmt.Printf("Fix: rewrite %d commit(s) to '%s <%s>'\n\n", len(wrongCommits), acc.Name, acc.Email)
 	for i, c := range wrongCommits {
 		fmt.Printf("  #%d  %s  %s <%s>\n      %s\n", i+1, shortHash(c.Hash), c.AuthorName, c.AuthorEmail, c.Subject)
 	}
 	fmt.Println()
 
-	if !skipConfirm {
-		if !confirm("Undo these commits? Changes will be kept staged.") {
-			fmt.Println("Cancelled.")
-			return nil
-		}
+	if !confirm("Rewrite author and force push?") {
+		fmt.Println("Cancelled.")
+		return nil
 	}
 
-	// Determine reset strategy
-	upstreamAvail := hasUpstream()
-	useEmptyReset := false
-	var resetTarget string
+	// Use git filter-branch to rewrite author
+	filterScript := fmt.Sprintf(
+		`if [ "$GIT_AUTHOR_EMAIL" != "%s" ]; then `+
+			`export GIT_AUTHOR_NAME="%s"; `+
+			`export GIT_AUTHOR_EMAIL="%s"; `+
+			`fi; `+
+			`if [ "$GIT_COMMITTER_EMAIL" != "%s" ]; then `+
+			`export GIT_COMMITTER_NAME="%s"; `+
+			`export GIT_COMMITTER_EMAIL="%s"; `+
+			`fi`,
+		acc.Email, acc.Name, acc.Email,
+		acc.Email, acc.Name, acc.Email,
+	)
 
-	if upstreamAvail && !allCommits && lastN == 0 {
-		resetTarget = "@{u}"
-	} else {
-		oldestHash := wrongCommits[len(wrongCommits)-1].Hash
-		parent, err := gitExec("rev-parse", oldestHash+"^")
-		if err != nil {
-			useEmptyReset = true
+	printInfo("rewriting commits...")
+	filterCmd := fmt.Sprintf(`git filter-branch -f --env-filter '%s' -- --all`, filterScript)
+	_, err = gitExec("sh", "-c", filterCmd)
+	if err != nil {
+		return fmt.Errorf("git filter-branch failed: %w", err)
+	}
+
+	printSuccess("%d commit(s) rewritten", len(wrongCommits))
+
+	// Switch git identity
+	if err := gitConfigSet("user.name", acc.Name); err != nil {
+		return fmt.Errorf("failed to set git user.name: %w", err)
+	}
+	if err := gitConfigSet("user.email", acc.Email); err != nil {
+		return fmt.Errorf("failed to set git user.email: %w", err)
+	}
+	printSuccess("git → %s <%s>", acc.Name, acc.Email)
+
+	// Switch gh auth if token available
+	if acc.Token != "" && ghIsInstalled() {
+		if err := ghLoginWithToken(acc.Token); err != nil {
+			printError("gh auth switch failed: %s", err)
 		} else {
-			totalCommits, _ := getCommitCount()
-			if totalCommits == len(wrongCommits) {
-				useEmptyReset = true
-			} else {
-				resetTarget = parent
+			ghUser, _ := ghGetUser()
+			if ghUser != "" {
+				printSuccess("gh  → %s", ghUser)
 			}
 		}
 	}
 
-	if useEmptyReset {
-		printInfo("resetting to empty state (all commits)...")
-		if err := resetToEmpty(); err != nil {
-			return fmt.Errorf("reset failed: %w", err)
-		}
-	} else {
-		printInfo("resetting to %s...", shortRef(resetTarget))
-		if err := softReset(resetTarget); err != nil {
-			return fmt.Errorf("reset failed: %w", err)
-		}
-		if err := stageAll(); err != nil {
-			return fmt.Errorf("staging failed: %w", err)
-		}
+	// Remember for this repo
+	if err := setRepoAccount(alias); err == nil {
+		printInfo("'%s' set as default for this repository", alias)
 	}
 
-	printSuccess("%d commit(s) undone — changes are staged and ready to commit", len(wrongCommits))
+	// Force push
+	if hasUpstream() {
+		branch, err := getCurrentBranch()
+		if err != nil {
+			return fmt.Errorf("cannot get current branch: %w", err)
+		}
+		upstream, _ := gitExec("rev-parse", "--abbrev-ref", "@{u}")
+		printInfo("force pushing to %s...", upstream)
+		if _, err := gitExec("push", "--force-with-lease"); err != nil {
+			return fmt.Errorf("force push failed: %w", err)
+		}
+		printSuccess("pushed to %s", upstream)
+	} else {
+		fmt.Println("\n  ⚠ No upstream set. Push manually:")
+		fmt.Println("    git push -u origin <branch>")
+	}
+
 	return nil
 }
 
@@ -394,148 +351,6 @@ func cmdPush(args []string) error {
 			printInfo("repo: %s", repoURL)
 		}
 	}
-
-	return nil
-}
-
-// cmdRewrite handles: ghs rewrite <alias> [--all] [--last N] [-y]
-// Rewrites commit author info while preserving history.
-func cmdRewrite(args []string) error {
-	fs := flag.NewFlagSet("rewrite", flag.ExitOnError)
-	all := fs.Bool("all", false, "All commits")
-	lastN := fs.Int("last", 0, "Only last N commits")
-	yes := fs.Bool("y", false, "Skip confirmation")
-
-	alias, flagArgs := extractAlias(args)
-	if alias == "" {
-		fmt.Println("Usage: ghs rewrite <alias> [--all] [--last N] [-y]")
-		return fmt.Errorf("alias is required")
-	}
-	fs.Parse(flagArgs)
-
-	acc, err := getAccount(alias)
-	if err != nil {
-		return err
-	}
-
-	// Get commits to rewrite
-	var commits []Commit
-	var base string
-
-	if *all {
-		commits, err = getCommits("")
-		base = "all commits"
-	} else if *lastN > 0 {
-		commits, err = getCommits(fmt.Sprintf("-n%d", *lastN))
-		base = fmt.Sprintf("last %d commits", *lastN)
-	} else if hasUpstream() {
-		commits, err = getCommits("@{u}..HEAD")
-		base = "unpushed commits"
-	} else {
-		commits, err = getCommits("")
-		base = "all commits (no upstream)"
-	}
-
-	if err != nil {
-		return fmt.Errorf("cannot get commits: %w", err)
-	}
-	if len(commits) == 0 {
-		printInfo("no commits to rewrite")
-		return nil
-	}
-
-	// Find commits with wrong author
-	var wrongCommits []Commit
-	for _, c := range commits {
-		if c.AuthorEmail != acc.Email {
-			wrongCommits = append(wrongCommits, c)
-		}
-	}
-
-	if len(wrongCommits) == 0 {
-		printInfo("no commits with wrong author in %d %s", len(commits), base)
-		return nil
-	}
-
-	fmt.Printf("Rewrite: change author to '%s <%s>'\n\n", acc.Name, acc.Email)
-	fmt.Printf("Found %d commit(s) to rewrite (out of %d %s):\n\n", len(wrongCommits), len(commits), base)
-	for i, c := range wrongCommits {
-		fmt.Printf("  #%d  %s  %s <%s>\n      %s\n", i+1, shortHash(c.Hash), c.AuthorName, c.AuthorEmail, c.Subject)
-	}
-	fmt.Println()
-
-	if !*yes {
-		if !confirm("Rewrite author for these commits? This rewrites git history.") {
-			fmt.Println("Cancelled.")
-			return nil
-		}
-	}
-
-	// Use git filter-branch to rewrite author
-	// Build the env-filter script
-	filterScript := fmt.Sprintf(
-		`if [ "$GIT_AUTHOR_EMAIL" != "%s" ]; then `+
-			`export GIT_AUTHOR_NAME="%s"; `+
-			`export GIT_AUTHOR_EMAIL="%s"; `+
-			`fi; `+
-			`if [ "$GIT_COMMITTER_EMAIL" != "%s" ]; then `+
-			`export GIT_COMMITTER_NAME="%s"; `+
-			`export GIT_COMMITTER_EMAIL="%s"; `+
-			`fi`,
-		acc.Email, acc.Name, acc.Email,
-		acc.Email, acc.Name, acc.Email,
-	)
-
-	// Determine revision range
-	var revRange string
-	if *all || !hasUpstream() {
-		// Rewrite all commits - need to handle root commit
-		revRange = "-- --all"
-	} else if *lastN > 0 {
-		// Last N commits
-		revRange = fmt.Sprintf("HEAD~%d..HEAD", *lastN)
-	} else {
-		// Unpushed commits
-		revRange = "@{u}..HEAD"
-	}
-
-	printInfo("rewriting commits...")
-	filterCmd := fmt.Sprintf(`git filter-branch -f --env-filter '%s' %s`, filterScript, revRange)
-	_, err = gitExec("sh", "-c", filterCmd)
-	if err != nil {
-		return fmt.Errorf("git filter-branch failed: %w", err)
-	}
-
-	printSuccess("%d commit(s) rewritten to '%s <%s>'", len(wrongCommits), acc.Name, acc.Email)
-
-	// Switch git identity
-	if err := gitConfigSet("user.name", acc.Name); err != nil {
-		return fmt.Errorf("failed to set git user.name: %w", err)
-	}
-	if err := gitConfigSet("user.email", acc.Email); err != nil {
-		return fmt.Errorf("failed to set git user.email: %w", err)
-	}
-	printSuccess("git → %s <%s>", acc.Name, acc.Email)
-
-	// Switch gh auth if token available
-	if acc.Token != "" && ghIsInstalled() {
-		if err := ghLoginWithToken(acc.Token); err != nil {
-			printError("gh auth switch failed: %s", err)
-		} else {
-			ghUser, _ := ghGetUser()
-			if ghUser != "" {
-				printSuccess("gh  → %s", ghUser)
-			}
-		}
-	}
-
-	// Remember for this repo
-	if err := setRepoAccount(alias); err == nil {
-		printInfo("'%s' set as default for this repository", alias)
-	}
-
-	fmt.Println("\n  ⚠ History rewritten. You need to force push:")
-	fmt.Println("    git push --force-with-lease")
 
 	return nil
 }
