@@ -67,6 +67,7 @@ Usage:
   ghs list                      List saved accounts
   ghs whoami                    Show current git/gh identity
   ghs undo [flags]              Undo commits by wrong author
+  ghs rewrite <alias> [flags]   Rewrite commit authors (preserves history)
   ghs push [flags]              Push (auto-create repo if needed)
   ghs fix <alias> [flags]       Undo + switch in one step
 
@@ -79,7 +80,7 @@ Flags for 'push':
   --public                     Create public repo (default: private)
   -r, --remote <name>          Remote name (default: origin)
 
-Flags for 'undo' and 'fix':
+Flags for 'undo', 'fix', 'rewrite':
   --all                        All commits (not just unpushed)
   --last <n>                   Only last N commits
   -y, --yes                    Skip confirmation
@@ -89,6 +90,7 @@ Examples:
   ghs add personal              # imports current gh token automatically
   ghs import                    # import all gh CLI accounts
   ghs fix work -y               # undo wrong commits + switch to work
+  ghs rewrite work --all -y     # rewrite all commits to work account
   ghs push                      # push, create repo if needed
 `, version)
 }
