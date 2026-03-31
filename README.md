@@ -13,6 +13,7 @@ CLI tool to switch between git identities (user.name, user.email) and GitHub acc
 | `ghs list` | Show saved accounts |
 | `ghs whoami` | Show current git/gh identity + branch |
 | `ghs undo [--all] [--last N] [-y]` | Soft-reset wrong-author commits, keep changes staged |
+| `ghs rewrite <alias> [--all] [--last N] [-y]` | Rewrite commit authors, preserve history (requires force push) |
 | `ghs fix <alias> [--all] [--last N] [-y]` | Undo + switch in one step |
 | `ghs push [--public] [-r remote]` | Push; auto-create GitHub repo if no remote |
 
