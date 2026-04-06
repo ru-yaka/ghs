@@ -18,6 +18,9 @@ jobs:
         with:
           go-version: '1.26'
 
+      - name: Set version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+
       - name: Build all platforms
         run: |
           mkdir -p dist
@@ -27,8 +30,22 @@ jobs:
             GOARCH="${p##*/}"
             EXT=""
             [ "$GOOS" = "windows" ] && EXT=".exe"
-            CGO_ENABLED=0 GOOS=$GOOS GOARCH=$GOARCH go build -ldflags "-s -w" -o "dist/ghs-${GOOS}-${GOARCH}${EXT}" .
+            CGO_ENABLED=0 GOOS=$GOOS GOARCH=$GOARCH go build \
+              -ldflags "-s -w -X main.version=${{ env.VERSION }}" \
+              -o "dist/ghs-${GOOS}-${GOARCH}${EXT}" .
             echo "Built ghs-${GOOS}-${GOARCH}${EXT}"
+          done
+
+      - name: Package Windows
+        run: |
+          for arch in amd64 arm64; do
+            cd dist
+            mkdir -p ghs-windows-${arch}
+            cp ghs-windows-${arch}.exe ghs-windows-${arch}/ghs.exe
+            cp ../install.bat ../install-ghs.ps1 ../uninstall.bat ghs-windows-${arch}/
+            zip -r ghs-windows-${arch}.zip ghs-windows-${arch}/
+            rm -rf ghs-windows-${arch} ghs-windows-${arch}.exe
+            cd ..
           done
 
       - name: Create Release

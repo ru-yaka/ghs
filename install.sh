@@ -6,7 +6,7 @@
 set -e
 
 INSTALL_DIR="${1:-/usr/local/bin}"
-REPO="cli/ghs"
+REPO="ru-yaka/ghs"
 BINARY="ghs"
 
 # Detect OS and ARCH

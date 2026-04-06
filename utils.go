@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-const version = "0.13.0"
+var version = "dev"
 
 func confirm(prompt string) bool {
 	fmt.Printf("%s (y/N): ", prompt)
