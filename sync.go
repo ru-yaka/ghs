@@ -108,6 +108,10 @@ func ensureGhAuth(alias string) (func(), error) {
 
 	// If alias specified, switch to that account
 	if alias != "" {
+		alias, err := resolveAlias(alias)
+		if err != nil {
+			return nil, err
+		}
 		acc, err := getAccount(alias)
 		if err != nil {
 			return nil, err
