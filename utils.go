@@ -49,6 +49,17 @@ func shortHash(hash string) string {
 	return hash
 }
 
+// formatSize formats KB to human-readable string.
+func formatSize(kb int) string {
+	if kb < 1024 {
+		return fmt.Sprintf("%d KB", kb)
+	}
+	if gb := kb / 1024; gb < 1024 {
+		return fmt.Sprintf("%d MB", gb)
+	}
+	return fmt.Sprintf("%.1f GB", float64(kb)/1024.0/1024.0)
+}
+
 func shortRef(ref string) string {
 	if strings.HasPrefix(ref, "@{u}") {
 		return "upstream"

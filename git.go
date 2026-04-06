@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -169,6 +170,14 @@ func getCommitCount() (int, error) {
 func isGitRepo() bool {
 	_, err := gitExec("rev-parse", "--git-dir")
 	return err == nil
+}
+
+// gitCloneWithProgress clones a repo with --progress, streaming output to terminal.
+func gitCloneWithProgress(url, dest string) error {
+	cmd := exec.Command("git", "clone", "--progress", url, dest)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 func getCommitCountOrZero() int {

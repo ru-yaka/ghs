@@ -108,6 +108,29 @@ func ghGetRepoURL() (string, error) {
 	return ghExec("repo", "view", "--json", "url", "-q", ".url")
 }
 
+// ghRepoSize returns the repo size in KB via GitHub API.
+func ghRepoSize(repoRef string) (int, error) {
+	out, err := ghExec("api", "repos/"+repoRef, "-q", ".size")
+	if err != nil {
+		return 0, err
+	}
+	var size int
+	fmt.Sscanf(out, "%d", &size)
+	return size, nil
+}
+
+// ghCloneWithProgress clones a repo using gh, streaming progress to terminal.
+func ghCloneWithProgress(repoRef, dest string) error {
+	ghExe, err := gh.Path()
+	if err != nil {
+		return fmt.Errorf("gh CLI not found: %w", err)
+	}
+	cmd := exec.Command(ghExe, "repo", "clone", repoRef, dest)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
 // ghImportHosts reads gh CLI hosts.yml and returns info for all authenticated accounts.
 // Supports both old flat format and new multi-account nested format:
 //

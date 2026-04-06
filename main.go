@@ -261,19 +261,25 @@ func cloneAndFix(repo string, acc *Account) error {
 		}
 	}
 
-	// Clone using gh (handles auth automatically)
+	// Show repo size before cloning
+	if ghIsInstalled() {
+		if size, err := ghRepoSize(cloneRef); err == nil && size > 0 {
+			printInfo("repo size: %s", formatSize(size))
+		}
+	}
+
+	// Clone with progress output streamed to terminal
 	printInfo("cloning %s...", repo)
 	if ghIsInstalled() {
-		if _, err := ghExec("repo", "clone", cloneRef, tmpDir); err != nil {
+		if err := ghCloneWithProgress(cloneRef, tmpDir); err != nil {
 			return fmt.Errorf("gh repo clone failed: %w", err)
 		}
 	} else {
-		// Fallback to git clone (no auth)
 		cloneURL := repo
 		if !strings.Contains(repo, "://") {
 			cloneURL = "https://github.com/" + repo + ".git"
 		}
-		if _, err := gitExec("clone", cloneURL, tmpDir); err != nil {
+		if err := gitCloneWithProgress(cloneURL, tmpDir); err != nil {
 			return fmt.Errorf("git clone failed: %w", err)
 		}
 	}
