@@ -166,6 +166,11 @@ func getCommitCount() (int, error) {
 	return count, nil
 }
 
+func isGitRepo() bool {
+	_, err := gitExec("rev-parse", "--git-dir")
+	return err == nil
+}
+
 func getCommitCountOrZero() int {
 	count, err := getCommitCount()
 	if err != nil {

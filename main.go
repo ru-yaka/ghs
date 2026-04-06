@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"regexp"
+	"strings"
 )
 
 func main() {
@@ -34,6 +36,8 @@ func main() {
 		err = cmdPush(args)
 	case "fix":
 		err = cmdFix(args)
+	case "sync":
+		err = cmdSync(args)
 	case "help", "--help", "-h":
 		printUsage()
 	case "version", "--version", "-v":
@@ -172,19 +176,99 @@ func cmdWhoami() {
 	}
 }
 
-// cmdFix handles: ghs fix <alias>
-// Rewrites all commit authors and force pushes.
-func cmdFix(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("usage: ghs fix <alias>")
-	}
-	alias := args[0]
+// repoPattern matches "owner/repo" format.
+var repoPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*/[a-zA-Z0-9._-]+$`)
 
-	acc, err := getAccount(alias)
+// isRepoRef returns true if the argument looks like a repo: URL, owner/repo, or "." for cwd.
+func isRepoRef(s string) bool {
+	return s == "." || strings.Contains(s, "://") || repoPattern.MatchString(s)
+}
+
+// cmdFix handles:
+//
+//	ghs fix <repo> [alias]        fix repo ("." = current dir), alias optional
+func cmdFix(args []string) error {
+	if len(args) == 0 || len(args) > 2 {
+		return fmt.Errorf("usage: ghs fix <repo> [alias]\n  repo: URL, owner/repo, or \".\" for current dir")
+	}
+
+	repo := args[0]
+	var alias string
+	if len(args) == 2 {
+		alias = args[1]
+	}
+
+	// "." means current directory
+	if repo == "." {
+		if !isGitRepo() {
+			return fmt.Errorf("not in a git repo")
+		}
+	}
+
+	// Resolve account
+	var acc *Account
+	var err error
+	if alias != "" {
+		acc, err = getAccount(alias)
+	} else {
+		acc, err = getDefaultAccount()
+	}
 	if err != nil {
 		return err
 	}
 
+	if repo == "." {
+		return fixInPlace(acc)
+	}
+	return cloneAndFix(repo, acc)
+}
+
+// cloneAndFix clones a remote repo to a temp directory, fixes it, pushes, and cleans up.
+func cloneAndFix(repo string, acc *Account) error {
+	// Normalize repo URL
+	cloneURL := repo
+	if !strings.Contains(repo, "://") {
+		cloneURL = "https://github.com/" + repo + ".git"
+	}
+
+	// Create temp directory
+	tmpDir, err := os.MkdirTemp("", "ghs-fix-*")
+	if err != nil {
+		return fmt.Errorf("cannot create temp dir: %w", err)
+	}
+	cleanup := true
+	defer func() {
+		if cleanup {
+			os.RemoveAll(tmpDir)
+		}
+	}()
+
+	// Clone
+	printInfo("cloning %s...", repo)
+	if _, err := gitExec("clone", cloneURL, tmpDir); err != nil {
+		return fmt.Errorf("git clone failed: %w", err)
+	}
+
+	// Save and switch directory
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		return fmt.Errorf("cannot chdir: %w", err)
+	}
+	defer os.Chdir(origDir)
+
+	// Fix
+	if err := fixInPlace(acc); err != nil {
+		// Don't cleanup on fix failure so user can inspect
+		cleanup = false
+		printInfo("repo left at %s for inspection", tmpDir)
+		return err
+	}
+
+	return nil
+}
+
+// fixInPlace rewrites all commit authors in the current repo and force pushes.
+func fixInPlace(acc *Account) error {
 	// Get all commits
 	commits, err := getCommits("")
 	if err != nil {
@@ -205,7 +289,15 @@ func cmdFix(args []string) error {
 
 	if len(wrongCommits) == 0 {
 		printInfo("all commits already have correct author")
-		return cmdUse([]string{alias})
+		// Still switch identity
+		if err := gitConfigSet("user.name", acc.Name); err != nil {
+			return fmt.Errorf("failed to set git user.name: %w", err)
+		}
+		if err := gitConfigSet("user.email", acc.Email); err != nil {
+			return fmt.Errorf("failed to set git user.email: %w", err)
+		}
+		printSuccess("git → %s <%s>", acc.Name, acc.Email)
+		return nil
 	}
 
 	fmt.Printf("Fix: rewrite %d commit(s) to '%s <%s>'\n\n", len(wrongCommits), acc.Name, acc.Email)
@@ -261,11 +353,6 @@ func cmdFix(args []string) error {
 				printSuccess("gh  → %s", ghUser)
 			}
 		}
-	}
-
-	// Remember for this repo
-	if err := setRepoAccount(alias); err == nil {
-		printInfo("'%s' set as default for this repository", alias)
 	}
 
 	// Force push

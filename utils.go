@@ -66,7 +66,9 @@ Usage:
   ghs use <alias>               Switch git/gh to account
   ghs list                      List saved accounts
   ghs whoami                    Show current git/gh identity
-  ghs fix <alias>               Rewrite all commits + switch + force push
+  ghs fix <repo> [alias]        Rewrite commits + switch + force push
+                                 repo: URL, owner/repo, or "." for current dir
+  ghs sync push|pull [alias]   Sync accounts via private Gist
   ghs push [--public]           Push (auto-create repo if needed)
 
 Flags for 'add':
@@ -81,7 +83,10 @@ Examples:
   ghs add work -n "Jane" -e jane@company.com
   ghs import                    # import all gh CLI accounts
   ghs use work                  # switch to work account
-  ghs fix work                  # rewrite all commits to work, force push
+  ghs fix .                     # fix current repo with default account
+  ghs fix . work                # fix current repo with work account
+  ghs fix owner/repo            # clone + fix repo with default account
+  ghs fix owner/repo work       # clone + fix repo with work account
 `, version)
 }
 

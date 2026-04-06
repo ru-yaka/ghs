@@ -357,6 +357,29 @@ func getRepoAccount() (string, error) {
 	return strings.TrimSpace(string(data)), nil
 }
 
+// getDefaultAccount returns the account matching the current global git user.email.
+func getDefaultAccount() (*Account, error) {
+	email, err := gitConfigGet("user.email")
+	if err != nil {
+		return nil, fmt.Errorf("cannot get git user.email: %w", err)
+	}
+
+	cfg, err := loadConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	for alias, acc := range cfg.Accounts {
+		if acc.Email == email {
+			acc := acc // capture
+			_ = alias
+			return &acc, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no account matches current git email '%s'. Use 'ghs fix <alias>' to specify", email)
+}
+
 func truncateToken(token string) string {
 	if len(token) > 6 {
 		return token[len(token)-6:]
