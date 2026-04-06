@@ -277,9 +277,30 @@ func syncPush() error {
 }
 
 func syncPull() error {
-	gistID, err := syncGistID()
-	if err != nil || gistID == "" {
-		return fmt.Errorf("no sync gist found. Run 'ghs sync push' first")
+	gistID, _ := syncGistID()
+
+	if gistID == "" {
+		// Auto-discover gist by listing user's gists
+		printInfo("no local gist ID, searching your gists...")
+		discovered, _ := discoverSyncGist()
+		if discovered != "" {
+			gistID = discovered
+			saveSyncGistID(gistID)
+			printInfo("found gist %s", gistID[:8])
+		}
+	}
+
+	if gistID == "" {
+		// Ask user to paste gist URL/ID
+		input, err := readInput("Gist URL or ID (from 'ghs sync push' output): ")
+		if err != nil || input == "" {
+			return fmt.Errorf("no sync gist. Run 'ghs sync push' on another machine first")
+		}
+		gistID = extractGistID(input)
+		if gistID == "" {
+			gistID = strings.TrimSpace(input)
+		}
+		saveSyncGistID(gistID)
 	}
 
 	result, err := ghExec("gist", "view", gistID, "-f", "ghs-config.enc", "--raw")
@@ -326,6 +347,29 @@ func syncPull() error {
 
 	printSuccess("synced %d account(s) from gist", len(cfg.Accounts))
 	return nil
+}
+
+// discoverSyncGist searches the user's gists for one with our description.
+func discoverSyncGist() (string, error) {
+	result, err := ghExec("gist", "list", "--json", "id,description", "--limit", "50")
+	if err != nil {
+		return "", err
+	}
+
+	var gists []struct {
+		ID          string `json:"id"`
+		Description string `json:"description"`
+	}
+	if err := json.Unmarshal([]byte(result), &gists); err != nil {
+		return "", nil
+	}
+
+	for _, g := range gists {
+		if strings.Contains(g.Description, "ghs config sync") {
+			return g.ID, nil
+		}
+	}
+	return "", nil
 }
 
 func extractGistID(urlOrID string) string {
