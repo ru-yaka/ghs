@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -30,10 +31,31 @@ func saveSyncGistID(id string) error {
 	return os.WriteFile(dir+"/sync-gist-id", []byte(id+"\n"), 0600)
 }
 
-// cmdSync handles: ghs sync push|pull [alias]
+// loadSyncKey reads the stored encryption key, returns empty if not set.
+func loadSyncKey() (string, error) {
+	dir, err := configDir()
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(dir + "/sync-key")
+	if err != nil {
+		return "", nil
+	}
+	return strings.TrimSpace(string(data)), nil
+}
+
+func saveSyncKey(key string) error {
+	dir, err := configDir()
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dir+"/sync-key", []byte(key+"\n"), 0600)
+}
+
+// cmdSync handles: ghs sync push|pull|key [alias]
 func cmdSync(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: ghs sync push|pull [alias]")
+		return fmt.Errorf("usage: ghs sync push|pull|key [alias]")
 	}
 
 	if !ghIsInstalled() {
@@ -42,7 +64,7 @@ func cmdSync(args []string) error {
 
 	action := args[0]
 	alias := ""
-	if len(args) >= 2 {
+	if len(args) >= 2 && action != "key" {
 		alias = args[1]
 	}
 
@@ -58,9 +80,25 @@ func cmdSync(args []string) error {
 		return syncPush()
 	case "pull":
 		return syncPull()
+	case "key":
+		return showSyncKey()
 	default:
-		return fmt.Errorf("usage: ghs sync push|pull [alias]")
+		return fmt.Errorf("usage: ghs sync push|pull|key [alias]")
 	}
+}
+
+// showSyncKey displays the current sync encryption key.
+func showSyncKey() error {
+	key, err := loadSyncKey()
+	if err != nil {
+		return err
+	}
+	if key == "" {
+		return fmt.Errorf("no sync key. Run 'ghs sync push' first")
+	}
+	fmt.Printf("  Sync key: %s\n", key)
+	printInfo("use this key on another machine: ghs sync pull")
+	return nil
 }
 
 // ensureGhAuth ensures the correct gh account is active for gist operations.
@@ -84,7 +122,6 @@ func ensureGhAuth(alias string) (func(), error) {
 		printInfo("using gh account: %s", newUser)
 		return func() {
 			if origUser != "" && origUser != newUser {
-				// Try to restore original account
 				origAcc, err := findAccountByGhUser(origUser)
 				if err == nil && origAcc.Token != "" {
 					ghLoginWithToken(origAcc.Token)
@@ -98,7 +135,6 @@ func ensureGhAuth(alias string) (func(), error) {
 		return func() {}, nil
 	}
 
-	// Not authenticated — try to find an account with a token
 	cfg, err := loadConfig()
 	if err != nil {
 		return nil, err
@@ -142,6 +178,17 @@ func findAccountByGhUser(ghUser string) (*Account, error) {
 	return nil, fmt.Errorf("no account with gh user '%s'", ghUser)
 }
 
+// readInput prompts and reads a line from stdin.
+func readInput(prompt string) (string, error) {
+	fmt.Print(prompt)
+	reader := bufio.NewReader(os.Stdin)
+	line, err := reader.ReadString('\n')
+	if err != nil && len(line) == 0 {
+		return "", fmt.Errorf("cannot read input: %w", err)
+	}
+	return strings.TrimSpace(line), nil
+}
+
 func syncPush() error {
 	cfg, err := loadConfig()
 	if err != nil {
@@ -153,19 +200,51 @@ func syncPush() error {
 		return fmt.Errorf("cannot marshal config: %w", err)
 	}
 
+	// Get or create encryption key
+	key, err := loadSyncKey()
+	if err != nil {
+		return err
+	}
+
+	if key == "" {
+		// First time: let user specify or auto-generate
+		key, err = readInput("Encryption key (leave empty to auto-generate): ")
+		if err != nil {
+			return err
+		}
+		if key == "" {
+			key, err = generateKey()
+			if err != nil {
+				return fmt.Errorf("generate key: %w", err)
+			}
+			fmt.Printf("  Generated key: %s\n", key)
+			printInfo("save this key — needed to sync on other machines")
+		}
+		if err := saveSyncKey(key); err != nil {
+			return fmt.Errorf("save key: %w", err)
+		}
+	}
+
+	encrypted, err := encrypt(data, key)
+	if err != nil {
+		return fmt.Errorf("encryption failed: %w", err)
+	}
+
 	gistID, _ := syncGistID()
 
 	if gistID != "" {
 		printInfo("updating gist %s...", gistID[:8])
 		_, err := ghExecWithStdin(
 			[]string{"gist", "edit", gistID, "-f", "ghs-config.json", "-"},
-			strings.NewReader(string(data)),
+			strings.NewReader(encrypted),
 		)
 		if err != nil {
 			printInfo("gist edit failed, creating new one...")
 			gistID = ""
 		} else {
-			printSuccess("config pushed to gist (%d accounts)", len(cfg.Accounts))
+			ghUser, _ := ghGetUser()
+			printSuccess("config pushed to gist %s (%d accounts)", gistID[:8], len(cfg.Accounts))
+			printInfo("gist: https://gist.github.com/%s/%s", ghUser, gistID)
 			return nil
 		}
 	}
@@ -173,7 +252,7 @@ func syncPush() error {
 	printInfo("creating private gist...")
 	result, err := ghExecWithStdin(
 		[]string{"gist", "create", "-d", gistDesc, "-f", "ghs-config.json", "-"},
-		strings.NewReader(string(data)),
+		strings.NewReader(encrypted),
 	)
 	if err != nil {
 		return fmt.Errorf("gh gist create failed: %w", err)
@@ -187,7 +266,9 @@ func syncPush() error {
 		printError("cannot save gist ID: %s", err)
 	}
 
+	ghUser, _ := ghGetUser()
 	printSuccess("config pushed to gist %s (%d accounts)", gistID[:8], len(cfg.Accounts))
+	printInfo("gist: https://gist.github.com/%s/%s", ghUser, gistID)
 	return nil
 }
 
@@ -202,8 +283,42 @@ func syncPull() error {
 		return fmt.Errorf("cannot read gist: %w", err)
 	}
 
+	result = strings.TrimSpace(result)
+
+	var configData []byte
+	if strings.HasPrefix(result, "{") {
+		// Old format: plain JSON (backwards compatibility)
+		configData = []byte(result)
+	} else {
+		// New format: encrypted
+		key, err := loadSyncKey()
+		if err != nil {
+			return err
+		}
+
+		if key == "" {
+			// New machine: prompt for key
+			key, err = readInput("Encryption key: ")
+			if err != nil {
+				return err
+			}
+			if key == "" {
+				return fmt.Errorf("key is required. Use 'ghs sync key' on the original machine")
+			}
+			// Save for future use
+			if err := saveSyncKey(key); err != nil {
+				return fmt.Errorf("save key: %w", err)
+			}
+		}
+
+		configData, err = decrypt(result, key)
+		if err != nil {
+			return err
+		}
+	}
+
 	var cfg Config
-	if err := json.Unmarshal([]byte(result), &cfg); err != nil {
+	if err := json.Unmarshal(configData, &cfg); err != nil {
 		return fmt.Errorf("invalid config data: %w", err)
 	}
 	if cfg.Accounts == nil {

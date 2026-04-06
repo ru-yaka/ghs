@@ -10,9 +10,8 @@ import (
 )
 
 type Account struct {
-	Name  string `json:"name"`
-	Email string `json:"email"`
-	Token string `json:"token,omitempty"`
+	Email  string `json:"email"`
+	Token  string `json:"token,omitempty"`
 	GhUser string `json:"gh_user,omitempty"`
 }
 
@@ -91,17 +90,14 @@ func saveConfig(cfg *Config) error {
 	return nil
 }
 
-// addAccount saves an account. If name/email are empty, reads from git config.
+// addAccount saves an account. If email is empty, reads from git config.
 // If token is empty, tries to import from current gh CLI auth.
-func addAccount(alias, name, email, token string) error {
+func addAccount(alias, email, token string) error {
 	if alias == "" {
 		return fmt.Errorf("alias is required")
 	}
 
-	// Try git config for name/email
-	if name == "" {
-		name, _ = gitConfigGet("user.name")
-	}
+	// Try git config for email
 	if email == "" {
 		email, _ = gitConfigGet("user.email")
 	}
@@ -113,9 +109,6 @@ func addAccount(alias, name, email, token string) error {
 		}
 	}
 
-	if name == "" {
-		return fmt.Errorf("name is required (use -n flag or set git user.name)")
-	}
 	if email == "" {
 		return fmt.Errorf("email is required (use -e flag or set git user.email)")
 	}
@@ -132,7 +125,6 @@ func addAccount(alias, name, email, token string) error {
 	}
 
 	cfg.Accounts[alias] = Account{
-		Name:   name,
 		Email:  email,
 		Token:  token,
 		GhUser: ghUser,
@@ -142,7 +134,7 @@ func addAccount(alias, name, email, token string) error {
 		return err
 	}
 
-	parts := []string{fmt.Sprintf("'%s' added: %s <%s>", alias, name, email)}
+	parts := []string{fmt.Sprintf("'%s' added: <%s>", alias, email)}
 	if token != "" {
 		parts = append(parts, "with token")
 	}
@@ -249,7 +241,7 @@ func listAccounts() error {
 		if acc.Token != "" {
 			tokenStatus = "has token"
 		}
-		line := fmt.Sprintf("  %-12s %s <%s>  [%s]", alias, acc.Name, acc.Email, tokenStatus)
+		line := fmt.Sprintf("  %-12s <%s>  [%s]", alias, acc.Email, tokenStatus)
 		if acc.GhUser != "" {
 			line += fmt.Sprintf("  gh:%s", acc.GhUser)
 		}
@@ -286,21 +278,19 @@ func importGhAccounts(overwrite bool) error {
 		}
 
 		if _, exists := cfg.Accounts[alias]; exists && !overwrite {
-			fmt.Printf("  → %-15s %s <%s>  [skipped, already exists]\n", alias, h.User, alias+"@users.noreply.github.com")
+			fmt.Printf("  → %-15s <%s>  [skipped, already exists]\n", alias, alias+"@users.noreply.github.com")
 			continue
 		}
 
 		// Use gh username and noreply email (don't use git config — it's global, not per-account)
-		name := h.User
 		email := h.User + "@users.noreply.github.com"
 
 		cfg.Accounts[alias] = Account{
-			Name:   name,
 			Email:  email,
 			Token:  h.Token,
 			GhUser: h.User,
 		}
-		fmt.Printf("  ✓ %-15s %s <%s>  token:****%s\n", alias, name, email, truncateToken(h.Token))
+		fmt.Printf("  ✓ %-15s <%s>  token:****%s\n", alias, email, truncateToken(h.Token))
 		imported++
 	}
 
@@ -318,9 +308,9 @@ func importGhAccounts(overwrite bool) error {
 				if acc, ok := cfg.Accounts[activeGhUser]; ok {
 					fmt.Printf("\nActive gh user is '%s' but git identity differs.\n", activeGhUser)
 					if confirm("Switch git to match?") {
-						gitConfigSet("user.name", acc.Name)
+						gitConfigSet("user.name", activeGhUser)
 						gitConfigSet("user.email", acc.Email)
-						printSuccess("git → %s <%s>", acc.Name, acc.Email)
+						printSuccess("git → %s <%s>", activeGhUser, acc.Email)
 					}
 				}
 			}
@@ -328,8 +318,8 @@ func importGhAccounts(overwrite bool) error {
 	}
 
 	// Show hint about setting proper name/email
-	fmt.Println("\nTip: Edit accounts with proper git name/email:")
-	fmt.Println("  ghs add <alias> -n \"Your Name\" -e your@email.com")
+	fmt.Println("\nTip: Edit accounts with proper email:")
+	fmt.Println("  ghs add <alias> -e your@email.com")
 	return nil
 }
 
@@ -430,4 +420,18 @@ func truncateToken(token string) string {
 		return token[len(token)-6:]
 	}
 	return token
+}
+
+// findAliasByEmail finds the account alias matching the given email.
+func findAliasByEmail(email string) string {
+	cfg, err := loadConfig()
+	if err != nil {
+		return ""
+	}
+	for a, acc := range cfg.Accounts {
+		if acc.Email == email {
+			return a
+		}
+	}
+	return ""
 }

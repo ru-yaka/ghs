@@ -54,21 +54,20 @@ func main() {
 	}
 }
 
-// cmdAdd handles: ghs add <alias> [-n name] [-e email] [-t token]
+// cmdAdd handles: ghs add <alias> [-e email] [-t token]
 func cmdAdd(args []string) error {
 	alias, flagArgs := extractAlias(args)
 	if alias == "" {
-		fmt.Println("Usage: ghs add <alias> [-n name] [-e email] [-t token]")
+		fmt.Println("Usage: ghs add <alias> [-e email] [-t token]")
 		return fmt.Errorf("alias is required")
 	}
 
 	fs := flag.NewFlagSet("add", flag.ExitOnError)
-	name := fs.String("n", "", "Author name")
 	email := fs.String("e", "", "Author email")
 	token := fs.String("t", "", "GitHub token")
 	fs.Parse(flagArgs)
 
-	return addAccount(alias, *name, *email, *token)
+	return addAccount(alias, *email, *token)
 }
 
 // cmdRemove handles: ghs remove <alias>
@@ -97,19 +96,24 @@ func cmdUse(args []string) error {
 	}
 	alias := args[0]
 
+	resolved, err := resolveAlias(alias)
+	if err != nil {
+		return err
+	}
+
 	acc, err := getAccount(alias)
 	if err != nil {
 		return err
 	}
 
-	// Switch git user
-	if err := gitConfigSet("user.name", acc.Name); err != nil {
+	// Switch git user — use resolved alias as name
+	if err := gitConfigSet("user.name", resolved); err != nil {
 		return fmt.Errorf("failed to set git user.name: %w", err)
 	}
 	if err := gitConfigSet("user.email", acc.Email); err != nil {
 		return fmt.Errorf("failed to set git user.email: %w", err)
 	}
-	printSuccess("git → %s <%s>", acc.Name, acc.Email)
+	printSuccess("git → %s <%s>", resolved, acc.Email)
 
 	// Switch gh auth if token available
 	if acc.Token != "" {
@@ -224,14 +228,22 @@ func cmdFix(args []string) error {
 		return err
 	}
 
-	if repo == "." {
-		return fixInPlace(acc)
+	// Resolve alias for git user.name (use GhUser or alias)
+	if alias == "" {
+		alias = acc.GhUser
+		if alias == "" {
+			alias = findAliasByEmail(acc.Email)
+		}
 	}
-	return cloneAndFix(repo, acc)
+
+	if repo == "." {
+		return fixInPlace(alias, acc)
+	}
+	return cloneAndFix(repo, alias, acc)
 }
 
 // cloneAndFix clones a remote repo to a temp directory, fixes it, pushes, and cleans up.
-func cloneAndFix(repo string, acc *Account) error {
+func cloneAndFix(repo, alias string, acc *Account) error {
 	// Normalize to owner/repo format for gh repo clone
 	cloneRef := repo
 	if strings.Contains(repo, "://") {
@@ -292,7 +304,7 @@ func cloneAndFix(repo string, acc *Account) error {
 	defer os.Chdir(origDir)
 
 	// Fix
-	if err := fixInPlace(acc); err != nil {
+	if err := fixInPlace(alias, acc); err != nil {
 		// Don't cleanup on fix failure so user can inspect
 		cleanup = false
 		printInfo("repo left at %s for inspection", tmpDir)
@@ -303,7 +315,7 @@ func cloneAndFix(repo string, acc *Account) error {
 }
 
 // fixInPlace rewrites all commit authors in the current repo and force pushes.
-func fixInPlace(acc *Account) error {
+func fixInPlace(alias string, acc *Account) error {
 	// Get all commits
 	commits, err := getCommits("")
 	if err != nil {
@@ -325,17 +337,17 @@ func fixInPlace(acc *Account) error {
 	if len(wrongCommits) == 0 {
 		printInfo("all commits already have correct author")
 		// Still switch identity
-		if err := gitConfigSet("user.name", acc.Name); err != nil {
+		if err := gitConfigSet("user.name", alias); err != nil {
 			return fmt.Errorf("failed to set git user.name: %w", err)
 		}
 		if err := gitConfigSet("user.email", acc.Email); err != nil {
 			return fmt.Errorf("failed to set git user.email: %w", err)
 		}
-		printSuccess("git → %s <%s>", acc.Name, acc.Email)
+		printSuccess("git → %s <%s>", alias, acc.Email)
 		return nil
 	}
 
-	fmt.Printf("Fix: rewrite %d commit(s) to '%s <%s>'\n\n", len(wrongCommits), acc.Name, acc.Email)
+	fmt.Printf("Fix: rewrite %d commit(s) to '%s <%s>'\n\n", len(wrongCommits), alias, acc.Email)
 	for i, c := range wrongCommits {
 		fmt.Printf("  #%d  %s  %s <%s>\n      %s\n", i+1, shortHash(c.Hash), c.AuthorName, c.AuthorEmail, c.Subject)
 	}
@@ -356,8 +368,8 @@ func fixInPlace(acc *Account) error {
 			`export GIT_COMMITTER_NAME="%s"; `+
 			`export GIT_COMMITTER_EMAIL="%s"; `+
 			`fi`,
-		acc.Email, acc.Name, acc.Email,
-		acc.Email, acc.Name, acc.Email,
+		acc.Email, alias, acc.Email,
+		acc.Email, alias, acc.Email,
 	)
 
 	printInfo("rewriting commits...")
@@ -369,13 +381,13 @@ func fixInPlace(acc *Account) error {
 	printSuccess("%d commit(s) rewritten", len(wrongCommits))
 
 	// Switch git identity
-	if err := gitConfigSet("user.name", acc.Name); err != nil {
+	if err := gitConfigSet("user.name", alias); err != nil {
 		return fmt.Errorf("failed to set git user.name: %w", err)
 	}
 	if err := gitConfigSet("user.email", acc.Email); err != nil {
 		return fmt.Errorf("failed to set git user.email: %w", err)
 	}
-	printSuccess("git → %s <%s>", acc.Name, acc.Email)
+	printSuccess("git → %s <%s>", alias, acc.Email)
 
 	// Switch gh auth if token available
 	if acc.Token != "" && ghIsInstalled() {
@@ -392,9 +404,11 @@ func fixInPlace(acc *Account) error {
 	// Force push
 	if hasUpstream() {
 		upstream, _ := gitExec("rev-parse", "--abbrev-ref", "@{u}")
+		branch, _ := getCurrentBranch()
 		printInfo("force pushing to %s...", upstream)
-		if _, err := gitExec("push", "--force-with-lease"); err != nil {
-			return fmt.Errorf("force push failed: %w", err)
+		out, err := gitExec("push", "--force", "origin", branch)
+		if err != nil {
+			return fmt.Errorf("force push failed: %s", out)
 		}
 		printSuccess("pushed to %s", upstream)
 	} else {

@@ -79,11 +79,11 @@ Usage:
   ghs whoami                    Show current git/gh identity
   ghs fix <repo> [alias]        Rewrite commits + switch + force push
                                  repo: URL, owner/repo, or "." for current dir
-  ghs sync push|pull [alias]   Sync accounts via private Gist
+  ghs sync push|pull [alias]   Sync accounts via encrypted private Gist
+  ghs sync key                  Show sync encryption key
   ghs push [--public]           Push (auto-create repo if needed)
 
 Flags for 'add':
-  -n, --name <name>            Author name (default: current git config)
   -e, --email <email>          Author email (default: current git config)
   -t, --token <token>          GitHub token (default: import from gh CLI)
 
@@ -91,7 +91,7 @@ Flags for 'push':
   --public                     Create public repo (default: private)
 
 Examples:
-  ghs add work -n "Jane" -e jane@company.com
+  ghs add work -e jane@company.com
   ghs import                    # import all gh CLI accounts
   ghs use work                  # switch to work account
   ghs fix .                     # fix current repo with default account
