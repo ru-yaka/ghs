@@ -361,8 +361,7 @@ func fixInPlace(acc *Account) error {
 	)
 
 	printInfo("rewriting commits...")
-	filterCmd := fmt.Sprintf(`git filter-branch -f --env-filter '%s' -- --all`, filterScript)
-	_, err = gitExec("sh", "-c", filterCmd)
+	_, err = gitExec("filter-branch", "-f", "--env-filter", filterScript, "--", "--all")
 	if err != nil {
 		return fmt.Errorf("git filter-branch failed: %w", err)
 	}
