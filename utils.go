@@ -82,6 +82,7 @@ Usage:
   ghs sync push|pull [alias]   Sync accounts via encrypted private Gist
   ghs sync key                  Show sync encryption key
   ghs push [--public]           Push (auto-create repo if needed)
+  ghs update [version]          Self-upgrade to latest (or specific version)
 
 Flags for 'add':
   -e, --email <email>          Author email (default: current git config)

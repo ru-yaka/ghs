@@ -38,6 +38,8 @@ func main() {
 		err = cmdFix(args)
 	case "sync":
 		err = cmdSync(args)
+	case "update", "upgrade":
+		err = cmdUpdate(args)
 	case "help", "--help", "-h":
 		printUsage()
 	case "version", "--version", "-v":

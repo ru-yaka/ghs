@@ -153,7 +153,19 @@ func ensureGhAuth(alias string) (func(), error) {
 
 	switch len(withToken) {
 	case 0:
-		return nil, fmt.Errorf("no account with token found. Run 'ghs import' or 'ghs add <alias> -t <token>'")
+		// No accounts with token — prompt for a temporary token
+		printInfo("no account with token found")
+		token, err := readInput("GitHub token (for gist access only): ")
+		if err != nil || strings.TrimSpace(token) == "" {
+			return nil, fmt.Errorf("token required for sync. Run 'ghs import' or 'ghs add <alias> -t <token>'")
+		}
+		token = strings.TrimSpace(token)
+		if err := ghLoginWithToken(token); err != nil {
+			return nil, fmt.Errorf("token authentication failed: %w", err)
+		}
+		newUser, _ := ghGetUser()
+		printInfo("authenticated as: %s", newUser)
+		return func() {}, nil
 	case 1:
 		acc := cfg.Accounts[withToken[0]]
 		if err := ghLoginWithToken(acc.Token); err != nil {
