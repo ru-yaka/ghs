@@ -210,6 +210,13 @@ func cmdFix(args []string) error {
 	var err error
 	if alias != "" {
 		acc, err = getAccount(alias)
+	} else if repo != "." {
+		// For remote repos, default to account matching the repo owner
+		acc, err = getAccountByRepoOwner(repo)
+		if err != nil {
+			printInfo("%s", err)
+			acc, err = getDefaultAccount()
+		}
 	} else {
 		acc, err = getDefaultAccount()
 	}
@@ -225,10 +232,14 @@ func cmdFix(args []string) error {
 
 // cloneAndFix clones a remote repo to a temp directory, fixes it, pushes, and cleans up.
 func cloneAndFix(repo string, acc *Account) error {
-	// Normalize repo URL
-	cloneURL := repo
-	if !strings.Contains(repo, "://") {
-		cloneURL = "https://github.com/" + repo + ".git"
+	// Normalize to owner/repo format for gh repo clone
+	cloneRef := repo
+	if strings.Contains(repo, "://") {
+		// https://github.com/owner/repo.git → owner/repo
+		parts := strings.Split(strings.TrimRight(strings.TrimSuffix(repo, ".git"), "/"), "/")
+		if len(parts) >= 2 {
+			cloneRef = parts[len(parts)-2] + "/" + parts[len(parts)-1]
+		}
 	}
 
 	// Create temp directory
@@ -243,10 +254,28 @@ func cloneAndFix(repo string, acc *Account) error {
 		}
 	}()
 
-	// Clone
+	// Switch gh auth to the account that has push access, then clone
+	if acc.Token != "" && ghIsInstalled() {
+		if err := ghLoginWithToken(acc.Token); err != nil {
+			printError("gh auth switch failed: %s", err)
+		}
+	}
+
+	// Clone using gh (handles auth automatically)
 	printInfo("cloning %s...", repo)
-	if _, err := gitExec("clone", cloneURL, tmpDir); err != nil {
-		return fmt.Errorf("git clone failed: %w", err)
+	if ghIsInstalled() {
+		if _, err := ghExec("repo", "clone", cloneRef, tmpDir); err != nil {
+			return fmt.Errorf("gh repo clone failed: %w", err)
+		}
+	} else {
+		// Fallback to git clone (no auth)
+		cloneURL := repo
+		if !strings.Contains(repo, "://") {
+			cloneURL = "https://github.com/" + repo + ".git"
+		}
+		if _, err := gitExec("clone", cloneURL, tmpDir); err != nil {
+			return fmt.Errorf("git clone failed: %w", err)
+		}
 	}
 
 	// Save and switch directory

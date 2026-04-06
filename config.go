@@ -380,6 +380,51 @@ func getDefaultAccount() (*Account, error) {
 	return nil, fmt.Errorf("no account matches current git email '%s'. Use 'ghs fix <alias>' to specify", email)
 }
 
+// getAccountByRepoOwner extracts the owner from a repo reference (URL or owner/repo)
+// and finds a matching account by GhUser field.
+func getAccountByRepoOwner(repo string) (*Account, error) {
+	owner := extractOwner(repo)
+	if owner == "" {
+		return nil, fmt.Errorf("cannot determine repo owner from '%s'", repo)
+	}
+
+	cfg, err := loadConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	for alias, acc := range cfg.Accounts {
+		if strings.EqualFold(acc.GhUser, owner) {
+			acc := acc
+			_ = alias
+			return &acc, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no account with gh user '%s'", owner)
+}
+
+// extractOwner extracts the owner from a repo reference.
+// "https://github.com/owner/repo.git" → "owner"
+// "owner/repo" → "owner"
+func extractOwner(repo string) string {
+	if strings.Contains(repo, "://") {
+		// URL: https://github.com/owner/repo.git
+		repo = strings.TrimSuffix(repo, ".git")
+		repo = strings.TrimRight(repo, "/")
+		parts := strings.Split(repo, "/")
+		if len(parts) >= 2 {
+			return parts[len(parts)-2]
+		}
+	}
+	// owner/repo format
+	parts := strings.SplitN(repo, "/", 2)
+	if len(parts) == 2 {
+		return parts[0]
+	}
+	return ""
+}
+
 func truncateToken(token string) string {
 	if len(token) > 6 {
 		return token[len(token)-6:]
