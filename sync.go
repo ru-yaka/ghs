@@ -235,7 +235,7 @@ func syncPush() error {
 	if gistID != "" {
 		printInfo("updating gist %s...", gistID[:8])
 		_, err := ghExecWithStdin(
-			[]string{"gist", "edit", gistID, "-f", "ghs-config.json", "-"},
+			[]string{"gist", "edit", gistID, "-f", "ghs-config.enc", "-"},
 			strings.NewReader(encrypted),
 		)
 		if err != nil {
@@ -251,7 +251,7 @@ func syncPush() error {
 
 	printInfo("creating private gist...")
 	result, err := ghExecWithStdin(
-		[]string{"gist", "create", "-d", gistDesc, "-f", "ghs-config.json", "-"},
+		[]string{"gist", "create", "-d", gistDesc, "-f", "ghs-config.enc", "-"},
 		strings.NewReader(encrypted),
 	)
 	if err != nil {
@@ -278,43 +278,34 @@ func syncPull() error {
 		return fmt.Errorf("no sync gist found. Run 'ghs sync push' first")
 	}
 
-	result, err := ghExec("gist", "view", gistID, "-f", "ghs-config.json", "--raw")
+	result, err := ghExec("gist", "view", gistID, "-f", "ghs-config.enc", "--raw")
 	if err != nil {
 		return fmt.Errorf("cannot read gist: %w", err)
 	}
 
 	result = strings.TrimSpace(result)
 
-	var configData []byte
-	if strings.HasPrefix(result, "{") {
-		// Old format: plain JSON (backwards compatibility)
-		configData = []byte(result)
-	} else {
-		// New format: encrypted
-		key, err := loadSyncKey()
+	key, err := loadSyncKey()
+	if err != nil {
+		return err
+	}
+
+	if key == "" {
+		key, err = readInput("Encryption key: ")
 		if err != nil {
 			return err
 		}
-
 		if key == "" {
-			// New machine: prompt for key
-			key, err = readInput("Encryption key: ")
-			if err != nil {
-				return err
-			}
-			if key == "" {
-				return fmt.Errorf("key is required. Use 'ghs sync key' on the original machine")
-			}
-			// Save for future use
-			if err := saveSyncKey(key); err != nil {
-				return fmt.Errorf("save key: %w", err)
-			}
+			return fmt.Errorf("key is required. Use 'ghs sync key' on the original machine")
 		}
+		if err := saveSyncKey(key); err != nil {
+			return fmt.Errorf("save key: %w", err)
+		}
+	}
 
-		configData, err = decrypt(result, key)
-		if err != nil {
-			return err
-		}
+	configData, err := decrypt(result, key)
+	if err != nil {
+		return err
 	}
 
 	var cfg Config
