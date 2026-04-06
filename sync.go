@@ -362,23 +362,17 @@ func syncPull() error {
 }
 
 // discoverSyncGist searches the user's gists for one with our description.
+// gh gist list outputs tab-separated: ID<tab>description<tab>files<tab>visibility<tab>date
 func discoverSyncGist() (string, error) {
-	result, err := ghExec("gist", "list", "--json", "id,description", "--limit", "50")
+	result, err := ghExec("gist", "list", "--limit", "50")
 	if err != nil {
 		return "", err
 	}
 
-	var gists []struct {
-		ID          string `json:"id"`
-		Description string `json:"description"`
-	}
-	if err := json.Unmarshal([]byte(result), &gists); err != nil {
-		return "", nil
-	}
-
-	for _, g := range gists {
-		if strings.Contains(g.Description, "ghs config sync") {
-			return g.ID, nil
+	for _, line := range strings.Split(result, "\n") {
+		fields := strings.Split(line, "\t")
+		if len(fields) >= 2 && strings.Contains(fields[1], gistDesc) {
+			return strings.TrimSpace(fields[0]), nil
 		}
 	}
 	return "", nil
