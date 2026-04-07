@@ -222,29 +222,59 @@ func webdavSetup() error {
 	fmt.Println("Configure WebDAV for automatic sync")
 	fmt.Println()
 
-	url, err := readInput(fmt.Sprintf("WebDAV URL [default: %s]: ", defaultURL))
+	// Load existing config for defaults
+	existing, _ := loadWebDAVConfig()
+
+	// URL prompt
+	urlPrompt := fmt.Sprintf("WebDAV URL [default: %s]: ", defaultURL)
+	if existing != nil && existing.URL != "" {
+		urlPrompt = fmt.Sprintf("WebDAV URL [current: %s]: ", existing.URL)
+	}
+	url, err := readInput(urlPrompt)
 	if err != nil {
 		return err
 	}
 	url = strings.TrimSpace(url)
 	if url == "" {
-		url = defaultURL
+		if existing != nil && existing.URL != "" {
+			url = existing.URL
+		} else {
+			url = defaultURL
+		}
 	}
 
-	user, err := readInput("Username (or email for Jianguoyun): ")
+	// Username prompt
+	userPrompt := "Username (or email for Jianguoyun): "
+	if existing != nil && existing.User != "" {
+		userPrompt = fmt.Sprintf("Username [current: %s]: ", existing.User)
+	}
+	user, err := readInput(userPrompt)
 	if err != nil {
 		return err
 	}
+	user = strings.TrimSpace(user)
+	if user == "" && existing != nil && existing.User != "" {
+		user = existing.User
+	}
 
-	password, err := readInput("Password (app password for Jianguoyun): ")
+	// Password prompt
+	passPrompt := "Password (app password for Jianguoyun): "
+	if existing != nil && existing.Password != "" {
+		passPrompt = "Password [current: ******]: "
+	}
+	password, err := readInput(passPrompt)
 	if err != nil {
 		return err
+	}
+	password = strings.TrimSpace(password)
+	if password == "" && existing != nil && existing.Password != "" {
+		password = existing.Password
 	}
 
 	cfg := &WebDAVConfig{
 		URL:      url,
-		User:     strings.TrimSpace(user),
-		Password: strings.TrimSpace(password),
+		User:     user,
+		Password: password,
 	}
 
 	// Test connection

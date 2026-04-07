@@ -94,7 +94,7 @@ func cmdUpdate(args []string) error {
 		return fmt.Errorf("no binary found for %s in %s", archPattern, rel.TagName)
 	}
 
-	// Download
+	// Download with retry
 	printInfo("downloading %s...", rel.TagName)
 	tmp, err := os.CreateTemp("", "ghs-update-*")
 	if err != nil {
@@ -103,15 +103,29 @@ func cmdUpdate(args []string) error {
 	tmpPath := tmp.Name()
 	defer os.Remove(tmpPath)
 
-	resp2, err := http.Get(downloadURL)
-	if err != nil {
-		return fmt.Errorf("download failed: %w", err)
+	var resp2 *http.Response
+	for i := 0; i < 3; i++ {
+		resp2, err = http.Get(downloadURL)
+		if err == nil && resp2.StatusCode == 200 {
+			break
+		}
+		if err != nil {
+			printInfo("download attempt %d failed: %v", i+1, err)
+		} else {
+			resp2.Body.Close()
+			printInfo("download attempt %d failed: %s", i+1, resp2.Status)
+		}
+		if i < 2 {
+			printInfo("retrying...")
+		}
+	}
+	if err != nil || resp2.StatusCode != 200 {
+		if err != nil {
+			return fmt.Errorf("download failed after retries: %w", err)
+		}
+		return fmt.Errorf("download returned %s", resp2.Status)
 	}
 	defer resp2.Body.Close()
-
-	if resp2.StatusCode != 200 {
-		return fmt.Errorf("download returned %d", resp2.StatusCode)
-	}
 
 	size, err := io.Copy(tmp, resp2.Body)
 	tmp.Close()
