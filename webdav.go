@@ -217,26 +217,32 @@ func cmdWebDAV(args []string) error {
 }
 
 func webdavSetup() error {
+	const defaultURL = "https://dav.jianguoyun.com/dav/"
+
 	fmt.Println("Configure WebDAV for automatic sync")
 	fmt.Println()
 
-	url, err := readInput("WebDAV URL (e.g. https://dav.example.com/path): ")
-	if err != nil || url == "" {
-		return fmt.Errorf("URL is required")
+	url, err := readInput(fmt.Sprintf("WebDAV URL [default: %s]: ", defaultURL))
+	if err != nil {
+		return err
+	}
+	url = strings.TrimSpace(url)
+	if url == "" {
+		url = defaultURL
 	}
 
-	user, err := readInput("Username: ")
+	user, err := readInput("Username (or email for Jianguoyun): ")
 	if err != nil {
 		return err
 	}
 
-	password, err := readInput("Password: ")
+	password, err := readInput("Password (app password for Jianguoyun): ")
 	if err != nil {
 		return err
 	}
 
 	cfg := &WebDAVConfig{
-		URL:      strings.TrimSpace(url),
+		URL:      url,
 		User:     strings.TrimSpace(user),
 		Password: strings.TrimSpace(password),
 	}

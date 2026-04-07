@@ -181,6 +181,38 @@ func removeAccount(alias string) error {
 	return nil
 }
 
+func clearAllAccounts(sync bool) error {
+	cfg, err := loadConfig()
+	if err != nil {
+		return err
+	}
+
+	count := len(cfg.Accounts)
+	if count == 0 {
+		fmt.Println("No accounts to remove.")
+		return nil
+	}
+
+	if !confirm(fmt.Sprintf("Remove all %d account(s)?", count)) {
+		fmt.Println("Cancelled.")
+		return nil
+	}
+
+	cfg.Accounts = make(map[string]Account)
+	if err := saveConfig(cfg); err != nil {
+		return err
+	}
+
+	printSuccess("removed %d account(s)", count)
+
+	// Only sync if explicitly requested
+	if sync && webdavIsConfigured() {
+		webdavUpload()
+	}
+
+	return nil
+}
+
 func resolveAlias(input string) (string, error) {
 	cfg, err := loadConfig()
 	if err != nil {

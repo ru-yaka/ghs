@@ -30,6 +30,8 @@ func main() {
 		err = cmdAdd(args)
 	case "remove", "rm":
 		err = cmdRemove(args)
+	case "clear":
+		err = cmdClear(args)
 	case "use", "switch":
 		err = cmdUse(args)
 	case "list", "ls":
@@ -87,6 +89,17 @@ func cmdRemove(args []string) error {
 		return fmt.Errorf("usage: ghs remove <alias>")
 	}
 	return removeAccount(args[0])
+}
+
+// cmdClear handles: ghs clear [--sync]
+func cmdClear(args []string) error {
+	sync := false
+	for _, a := range args {
+		if a == "--sync" || a == "-s" {
+			sync = true
+		}
+	}
+	return clearAllAccounts(sync)
 }
 
 // cmdImport handles: ghs import [--force]

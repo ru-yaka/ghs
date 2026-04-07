@@ -50,6 +50,14 @@ func cmdUpdate(args []string) error {
 	printInfo("checking for updates...")
 	req, _ := http.NewRequest("GET", apiURL, nil)
 	req.Header.Set("User-Agent", "ghs/"+version)
+
+	// Use gh auth token if available (avoids 403 rate limit)
+	if ghIsInstalled() {
+		if token, err := ghGetToken(); err == nil && token != "" {
+			req.Header.Set("Authorization", "token "+token)
+		}
+	}
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("cannot check for updates: %w", err)

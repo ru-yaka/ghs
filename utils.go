@@ -102,6 +102,7 @@ Usage:
   ghs add <alias> [flags]       Add account (auto-imports gh token)
   ghs import [--force]          Import accounts from gh CLI
   ghs remove <alias>            Remove saved account
+  ghs clear [--sync]            Remove all accounts (use --sync to push to WebDAV)
   ghs use <alias>               Switch git/gh to account
   ghs list                      List saved accounts
   ghs whoami                    Show current git/gh identity
