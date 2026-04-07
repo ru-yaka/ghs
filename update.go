@@ -140,8 +140,29 @@ func cmdUpdate(args []string) error {
 	}
 
 	// Replace
+	if runtime.GOOS == "windows" {
+		// Windows can't replace running executable
+		// Download to ghs-new.exe next to current binary
+		newPath := filepath.Join(filepath.Dir(exe), "ghs-new.exe")
+		if err := os.Rename(tmpPath, newPath); err != nil {
+			// If rename fails (cross-device), copy instead
+			data, err := os.ReadFile(tmpPath)
+			if err != nil {
+				return fmt.Errorf("cannot read downloaded file: %w", err)
+			}
+			if err := os.WriteFile(newPath, data, 0755); err != nil {
+				return fmt.Errorf("cannot write new binary: %w", err)
+			}
+		}
+		printSuccess("downloaded to %s", newPath)
+		fmt.Println("  Please close ghs and manually replace:")
+		fmt.Printf("    del \"%s\"\n", exe)
+		fmt.Printf("    ren \"%s\" ghs.exe\n", newPath)
+		return nil
+	}
+
+	// Unix: try direct replace, fall back to sudo
 	if err := os.Rename(tmpPath, exe); err != nil {
-		// Might need sudo
 		printInfo("cannot replace %s — trying with elevated permissions...", exe)
 		cmd := exec.Command("sudo", "cp", tmpPath, exe)
 		if out, err := cmd.CombinedOutput(); err != nil {
