@@ -142,6 +142,12 @@ func addAccount(alias, email, token string) error {
 		parts = append(parts, fmt.Sprintf("(gh: %s)", ghUser))
 	}
 	fmt.Printf("  ✓ %s\n", strings.Join(parts, " "))
+
+	// Auto-sync to WebDAV
+	if webdavIsConfigured() {
+		webdavUpload()
+	}
+
 	return nil
 }
 
@@ -166,6 +172,12 @@ func removeAccount(alias string) error {
 	}
 
 	fmt.Printf("  ✓ Account '%s' removed\n", resolved)
+
+	// Auto-sync to WebDAV
+	if webdavIsConfigured() {
+		webdavUpload()
+	}
+
 	return nil
 }
 
@@ -320,6 +332,12 @@ func importGhAccounts(overwrite bool) error {
 	// Show hint about setting proper name/email
 	fmt.Println("\nTip: Edit accounts with proper email:")
 	fmt.Println("  ghs add <alias> -e your@email.com")
+
+	// Auto-sync to WebDAV
+	if imported > 0 && webdavIsConfigured() {
+		webdavUpload()
+	}
+
 	return nil
 }
 

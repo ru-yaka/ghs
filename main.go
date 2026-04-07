@@ -11,6 +11,11 @@ import (
 func main() {
 	cleanupLegacyFiles()
 
+	// Auto-sync from WebDAV on startup (silently)
+	if webdavIsConfigured() {
+		webdavDownload() // ignore errors
+	}
+
 	if len(os.Args) < 2 {
 		printUsage()
 		os.Exit(1)
@@ -40,6 +45,8 @@ func main() {
 		err = cmdFix(args)
 	case "sync":
 		err = cmdSync(args)
+	case "webdav":
+		err = cmdWebDAV(args)
 	case "update", "upgrade":
 		err = cmdUpdate(args)
 	case "help", "--help", "-h":
