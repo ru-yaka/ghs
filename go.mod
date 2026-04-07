@@ -1,9 +1,9 @@
 module github.com/cli/ghs
 
-go 1.23
+go 1.26
 
 require (
-	github.com/cli/go-gh/v2 v2.12.2
+	github.com/cli/go-gh/v2 v2.13.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
