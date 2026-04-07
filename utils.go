@@ -9,6 +9,34 @@ import (
 
 var version = "dev"
 
+// cleanupLegacyFiles removes obsolete files from older ghs versions.
+func cleanupLegacyFiles() {
+	ghsDir, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	ghsDir += "/.ghs"
+
+	// Remove old sync files (gist-based sync removed in v0.21.0)
+	legacyFiles := []string{
+		ghsDir + "/sync-gist-id",
+		ghsDir + "/sync-key",
+	}
+	for _, f := range legacyFiles {
+		os.Remove(f) // ignore errors
+	}
+}
+
+func readInput(prompt string) (string, error) {
+	fmt.Print(prompt)
+	reader := bufio.NewReader(os.Stdin)
+	line, err := reader.ReadString('\n')
+	if err != nil && len(line) == 0 {
+		return "", fmt.Errorf("cannot read input: %w", err)
+	}
+	return strings.TrimSpace(line), nil
+}
+
 func confirm(prompt string) bool {
 	fmt.Printf("%s (y/N): ", prompt)
 	reader := bufio.NewReader(os.Stdin)
@@ -79,8 +107,8 @@ Usage:
   ghs whoami                    Show current git/gh identity
   ghs fix <repo> [alias]        Rewrite commits + switch + force push
                                  repo: URL, owner/repo, or "." for current dir
-  ghs sync push|pull [alias]   Sync accounts via encrypted private Gist
-  ghs sync key                  Show sync encryption key
+  ghs sync export              Export encrypted accounts (copy to other machine)
+  ghs sync import              Import accounts from encrypted data
   ghs push [--public]           Push (auto-create repo if needed)
   ghs update [version]          Self-upgrade to latest (or specific version)
 
