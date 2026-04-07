@@ -280,17 +280,113 @@ func webdavSync() error {
 		return fmt.Errorf("WebDAV not configured. Run 'ghs webdav setup' first")
 	}
 
-	printInfo("downloading from WebDAV...")
-	if err := webdavDownload(); err != nil {
+	// Load local config
+	localCfg, err := loadConfig()
+	if err != nil {
+		return err
+	}
+	if localCfg.Accounts == nil {
+		localCfg.Accounts = make(map[string]Account)
+	}
+
+	// Download remote config
+	cfg, err := loadWebDAVConfig()
+	if err != nil {
 		return err
 	}
 
-	printInfo("uploading to WebDAV...")
-	if err := webdavUpload(); err != nil {
-		return err
+	url := strings.TrimSuffix(cfg.URL, "/") + "/ghs-config.enc"
+	req, _ := http.NewRequest("GET", url, nil)
+	req.SetBasicAuth(cfg.User, cfg.Password)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("WebDAV download failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var remoteCfg Config
+	if resp.StatusCode == 200 {
+		blob, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		data, err := decryptBlob(string(blob))
+		if err != nil {
+			return fmt.Errorf("decrypt failed: %w", err)
+		}
+		if err := json.Unmarshal(data, &remoteCfg); err != nil {
+			return fmt.Errorf("invalid remote config: %w", err)
+		}
+	}
+	if remoteCfg.Accounts == nil {
+		remoteCfg.Accounts = make(map[string]Account)
 	}
 
-	printSuccess("sync complete")
+	// Merge: pull new accounts from remote, push local-only accounts
+	pulled, pushed := 0, 0
+	changed := false
+
+	// Pull: remote accounts not in local
+	for alias, acc := range remoteCfg.Accounts {
+		if _, exists := localCfg.Accounts[alias]; !exists {
+			localCfg.Accounts[alias] = acc
+			pulled++
+			changed = true
+		}
+	}
+
+	// Push: local accounts not in remote
+	for alias, acc := range localCfg.Accounts {
+		if _, exists := remoteCfg.Accounts[alias]; !exists {
+			remoteCfg.Accounts[alias] = acc
+			pushed++
+		}
+	}
+
+	// Save local if changed
+	if changed {
+		if err := saveConfig(localCfg); err != nil {
+			return err
+		}
+	}
+
+	// Upload if there are local-only accounts
+	if pushed > 0 {
+		data, err := json.Marshal(localCfg)
+		if err != nil {
+			return err
+		}
+		blob, err := encryptBlob(data)
+		if err != nil {
+			return err
+		}
+
+		req2, _ := http.NewRequest("PUT", url, strings.NewReader(blob))
+		req2.SetBasicAuth(cfg.User, cfg.Password)
+
+		resp2, err := http.DefaultClient.Do(req2)
+		if err != nil {
+			return fmt.Errorf("WebDAV upload failed: %w", err)
+		}
+		resp2.Body.Close()
+
+		if resp2.StatusCode >= 400 {
+			return fmt.Errorf("WebDAV upload failed: %s", resp2.Status)
+		}
+	}
+
+	if pulled == 0 && pushed == 0 {
+		printSuccess("already in sync")
+	} else {
+		if pulled > 0 {
+			printSuccess("pulled %d account(s) from remote", pulled)
+		}
+		if pushed > 0 {
+			printSuccess("pushed %d account(s) to remote", pushed)
+		}
+	}
+
 	return nil
 }
 
