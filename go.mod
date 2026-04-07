@@ -10,5 +10,4 @@ require (
 require (
 	github.com/cli/safeexec v1.0.0 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
-	gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405 // indirect
 )
