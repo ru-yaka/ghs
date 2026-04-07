@@ -269,15 +269,9 @@ func webdavSetup() error {
 		return err
 	}
 
-	// Upload current config immediately
-	printInfo("uploading initial config...")
-	if err := webdavUpload(); err != nil {
-		printError("initial upload failed: %s", err)
-	}
-
 	printSuccess("WebDAV configured successfully")
 	fmt.Printf("  File: %s/ghs-config.enc\n", cfg.URL)
-	printInfo("accounts will auto-sync on add/remove/import and startup")
+	printInfo("run 'ghs webdav sync' to upload your accounts")
 	return nil
 }
 
