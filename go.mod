@@ -3,11 +3,12 @@ module github.com/cli/ghs
 go 1.23
 
 require (
-	github.com/cli/go-gh/v2 v2.13.0
+	github.com/cli/go-gh/v2 v2.12.2
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
 	github.com/cli/safeexec v1.0.0 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
+	gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405 // indirect
 )
