@@ -271,7 +271,7 @@ func webdavSetup() error {
 
 	printSuccess("WebDAV configured successfully")
 	fmt.Printf("  File: %s/ghs-config.enc\n", cfg.URL)
-	printInfo("run 'ghs webdav sync' to upload your accounts")
+	printInfo("run 'ghs webdav sync' to sync accounts with remote")
 	return nil
 }
 
