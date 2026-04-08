@@ -116,7 +116,12 @@ func webdavUpload() error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 409 {
-		return fmt.Errorf("WebDAV upload failed: 409 Conflict\n  The directory does not exist on the WebDAV server.\n  Please create the folder '%s' in your WebDAV root first.", strings.TrimSuffix(cfg.URL, "/"))
+		// Extract folder name from URL
+		folder := strings.TrimSuffix(cfg.URL, "/")
+		if idx := strings.LastIndex(folder, "/"); idx != -1 {
+			folder = folder[idx+1:]
+		}
+		return fmt.Errorf("WebDAV upload failed: 409 Conflict\n  Please create folder '%s/' in your WebDAV root first.", folder)
 	}
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("WebDAV upload failed: %s", resp.Status)
@@ -405,7 +410,12 @@ func webdavSync() error {
 		resp2.Body.Close()
 
 		if resp2.StatusCode == 409 {
-			return fmt.Errorf("WebDAV upload failed: 409 Conflict\n  The directory does not exist on the WebDAV server.\n  Please create the folder '%s' in your WebDAV root first.", strings.TrimSuffix(cfg.URL, "/"))
+			// Extract folder name from URL
+			folder := strings.TrimSuffix(cfg.URL, "/")
+			if idx := strings.LastIndex(folder, "/"); idx != -1 {
+				folder = folder[idx+1:]
+			}
+			return fmt.Errorf("WebDAV upload failed: 409 Conflict\n  Please create folder '%s/' in your WebDAV root first.", folder)
 		}
 		if resp2.StatusCode >= 400 {
 			return fmt.Errorf("WebDAV upload failed: %s", resp2.Status)
