@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -141,14 +142,23 @@ func cmdUpdate(args []string) error {
 
 	// Replace
 	if runtime.GOOS == "windows" {
+		// Windows assets are zip files - need to extract
+		tmp.Close()
+		extractedPath := tmpPath + ".exe"
+		if err := extractFromZip(tmpPath, "ghs.exe", extractedPath); err != nil {
+			return fmt.Errorf("cannot extract from zip: %w", err)
+		}
+		os.Remove(tmpPath)
+		defer os.Remove(extractedPath)
+
 		// Windows can't replace running executable
 		// Download to ghs-new.exe next to current binary
 		newPath := filepath.Join(filepath.Dir(exe), "ghs-new.exe")
-		if err := os.Rename(tmpPath, newPath); err != nil {
+		if err := os.Rename(extractedPath, newPath); err != nil {
 			// If rename fails (cross-device), copy instead
-			data, err := os.ReadFile(tmpPath)
+			data, err := os.ReadFile(extractedPath)
 			if err != nil {
-				return fmt.Errorf("cannot read downloaded file: %w", err)
+				return fmt.Errorf("cannot read extracted file: %w", err)
 			}
 			if err := os.WriteFile(newPath, data, 0755); err != nil {
 				return fmt.Errorf("cannot write new binary: %w", err)
@@ -172,4 +182,33 @@ func cmdUpdate(args []string) error {
 
 	printSuccess("updated to %s", rel.TagName)
 	return nil
+}
+
+// extractFromZip extracts a specific file from a zip archive.
+func extractFromZip(zipPath, filename, destPath string) error {
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	for _, f := range r.File {
+		if filepath.Base(f.Name) == filename {
+			rc, err := f.Open()
+			if err != nil {
+				return err
+			}
+			defer rc.Close()
+
+			out, err := os.Create(destPath)
+			if err != nil {
+				return err
+			}
+			defer out.Close()
+
+			_, err = io.Copy(out, rc)
+			return err
+		}
+	}
+	return fmt.Errorf("file %s not found in zip", filename)
 }
