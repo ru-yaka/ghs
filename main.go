@@ -36,6 +36,8 @@ func main() {
 		err = cmdUse(args)
 	case "list", "ls":
 		err = listAccounts()
+	case "repos":
+		err = cmdRepos(args)
 	case "whoami", "status":
 		cmdWhoami()
 		os.Exit(0)

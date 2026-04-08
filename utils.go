@@ -105,6 +105,7 @@ Usage:
   ghs clear [--sync]            Remove all accounts (use --sync to push to WebDAV)
   ghs use <alias>               Switch git/gh to account
   ghs list                      List saved accounts
+  ghs repos [alias]             List GitHub repos (all accounts or specific one)
   ghs whoami                    Show current git/gh identity
   ghs fix <repo> [alias]        Rewrite commits + switch + force push
                                  repo: URL, owner/repo, or "." for current dir
