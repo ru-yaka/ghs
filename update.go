@@ -97,42 +97,63 @@ func cmdUpdate(args []string) error {
 
 	// Download with retry
 	printInfo("downloading %s...", rel.TagName)
-	tmp, err := os.CreateTemp("", "ghs-update-*")
-	if err != nil {
-		return fmt.Errorf("cannot create temp file: %w", err)
+
+	var tmp *os.File
+	var tmpPath string
+	var size int64
+
+	for attempt := 1; attempt <= 3; attempt++ {
+		tmp, err = os.CreateTemp("", "ghs-update-*")
+		if err != nil {
+			return fmt.Errorf("cannot create temp file: %w", err)
+		}
+		tmpPath = tmp.Name()
+
+		resp2, err := http.Get(downloadURL)
+		if err != nil {
+			tmp.Close()
+			os.Remove(tmpPath)
+			printInfo("download attempt %d failed: %v", attempt, err)
+			if attempt < 3 {
+				printInfo("retrying...")
+			}
+			continue
+		}
+
+		if resp2.StatusCode != 200 {
+			tmp.Close()
+			os.Remove(tmpPath)
+			resp2.Body.Close()
+			printInfo("download attempt %d failed: %s", attempt, resp2.Status)
+			if attempt < 3 {
+				printInfo("retrying...")
+			}
+			continue
+		}
+
+		size, err = io.Copy(tmp, resp2.Body)
+		resp2.Body.Close()
+		tmp.Close()
+
+		if err != nil {
+			os.Remove(tmpPath)
+			printInfo("download attempt %d failed: %v", attempt, err)
+			if attempt < 3 {
+				printInfo("retrying...")
+			}
+			continue
+		}
+
+		// Success
+		break
 	}
-	tmpPath := tmp.Name()
+
+	if size == 0 {
+		os.Remove(tmpPath)
+		return fmt.Errorf("download failed after 3 attempts")
+	}
 	defer os.Remove(tmpPath)
 
-	var resp2 *http.Response
-	for i := 0; i < 3; i++ {
-		resp2, err = http.Get(downloadURL)
-		if err == nil && resp2.StatusCode == 200 {
-			break
-		}
-		if err != nil {
-			printInfo("download attempt %d failed: %v", i+1, err)
-		} else {
-			resp2.Body.Close()
-			printInfo("download attempt %d failed: %s", i+1, resp2.Status)
-		}
-		if i < 2 {
-			printInfo("retrying...")
-		}
-	}
-	if err != nil || resp2.StatusCode != 200 {
-		if err != nil {
-			return fmt.Errorf("download failed after retries: %w", err)
-		}
-		return fmt.Errorf("download returned %s", resp2.Status)
-	}
-	defer resp2.Body.Close()
-
-	size, err := io.Copy(tmp, resp2.Body)
-	tmp.Close()
-	if err != nil {
-		return fmt.Errorf("download failed: %w", err)
-	}
 	printInfo("downloaded %s", formatSize(int(size/1024)))
 
 	// Make executable
