@@ -102,7 +102,7 @@ Usage:
   ghs add <alias> [flags]       Add account (auto-imports gh token)
   ghs import [--force]          Import accounts from gh CLI
   ghs remove <alias>            Remove saved account
-  ghs clear [--sync]            Remove all accounts (use --sync to push to WebDAV)
+  ghs clear                     Remove all accounts
   ghs use <alias>               Switch git/gh to account
   ghs list                      List saved accounts
   ghs repos [alias]             List GitHub repos (all accounts or specific one)
@@ -111,10 +111,6 @@ Usage:
                                  repo: URL, owner/repo, or "." for current dir
   ghs sync export              Export encrypted accounts (copy to other machine)
   ghs sync import              Import accounts from encrypted data
-  ghs webdav setup             Configure WebDAV for automatic sync
-  ghs webdav push              Push accounts to WebDAV
-  ghs webdav pull              Pull accounts from WebDAV
-  ghs webdav status            Show WebDAV configuration
   ghs push [--public]           Push (auto-create repo if needed)
   ghs update [version]          Self-upgrade to latest (or specific version)
 

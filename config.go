@@ -143,11 +143,6 @@ func addAccount(alias, email, token string) error {
 	}
 	fmt.Printf("  ✓ %s\n", strings.Join(parts, " "))
 
-	// Auto-sync to WebDAV
-	if webdavIsConfigured() {
-		webdavUpload()
-	}
-
 	return nil
 }
 
@@ -173,15 +168,10 @@ func removeAccount(alias string) error {
 
 	fmt.Printf("  ✓ Account '%s' removed\n", resolved)
 
-	// Auto-sync to WebDAV
-	if webdavIsConfigured() {
-		webdavUpload()
-	}
-
 	return nil
 }
 
-func clearAllAccounts(sync bool) error {
+func clearAllAccounts() error {
 	cfg, err := loadConfig()
 	if err != nil {
 		return err
@@ -204,11 +194,6 @@ func clearAllAccounts(sync bool) error {
 	}
 
 	printSuccess("removed %d account(s)", count)
-
-	// Only sync if explicitly requested
-	if sync && webdavIsConfigured() {
-		webdavUpload()
-	}
 
 	return nil
 }
@@ -364,11 +349,6 @@ func importGhAccounts(overwrite bool) error {
 	// Show hint about setting proper name/email
 	fmt.Println("\nTip: Edit accounts with proper email:")
 	fmt.Println("  ghs add <alias> -e your@email.com")
-
-	// Auto-sync to WebDAV
-	if imported > 0 && webdavIsConfigured() {
-		webdavUpload()
-	}
 
 	return nil
 }

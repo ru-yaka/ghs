@@ -11,11 +11,6 @@ import (
 func main() {
 	cleanupLegacyFiles()
 
-	// Auto-sync from WebDAV on startup (silently)
-	if webdavIsConfigured() {
-		webdavDownload() // ignore errors
-	}
-
 	if len(os.Args) < 2 {
 		printUsage()
 		os.Exit(1)
@@ -49,8 +44,6 @@ func main() {
 		err = cmdFix(args)
 	case "sync":
 		err = cmdSync(args)
-	case "webdav":
-		err = cmdWebDAV(args)
 	case "update", "upgrade":
 		err = cmdUpdate(args)
 	case "help", "--help", "-h":
@@ -93,15 +86,9 @@ func cmdRemove(args []string) error {
 	return removeAccount(args[0])
 }
 
-// cmdClear handles: ghs clear [--sync]
+// cmdClear handles: ghs clear
 func cmdClear(args []string) error {
-	sync := false
-	for _, a := range args {
-		if a == "--sync" || a == "-s" {
-			sync = true
-		}
-	}
-	return clearAllAccounts(sync)
+	return clearAllAccounts()
 }
 
 // cmdImport handles: ghs import [--force]
