@@ -161,8 +161,8 @@ func cmdUse(args []string) error {
 	}
 
 	// Remember for this repo
-	if err := setRepoAccount(alias); err == nil {
-		printInfo("'%s' set as default for this repository", alias)
+	if err := setRepoAccount(resolved); err == nil {
+		printInfo("'%s' set as default for this repository", resolved)
 	}
 
 	return nil
