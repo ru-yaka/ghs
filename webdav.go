@@ -206,21 +206,23 @@ func webdavDownload() error {
 	return nil
 }
 
-// cmdWebDAV handles: ghs webdav setup|sync|status
+// cmdWebDAV handles: ghs webdav setup|push|pull|status
 func cmdWebDAV(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: ghs webdav setup|sync|status")
+		return fmt.Errorf("usage: ghs webdav setup|push|pull|status")
 	}
 
 	switch args[0] {
 	case "setup":
 		return webdavSetup()
-	case "sync":
-		return webdavSync()
+	case "push":
+		return webdavPush()
+	case "pull":
+		return webdavPull()
 	case "status":
 		return webdavStatus()
 	default:
-		return fmt.Errorf("usage: ghs webdav setup|sync|status")
+		return fmt.Errorf("usage: ghs webdav setup|push|pull|status")
 	}
 }
 
@@ -309,13 +311,18 @@ func webdavSetup() error {
 
 	printSuccess("WebDAV configured successfully")
 	fmt.Printf("  File: %s/ghs-config.enc\n", cfg.URL)
-	printInfo("run 'ghs webdav sync' to sync accounts with remote")
+	printInfo("run 'ghs webdav push' to upload accounts to remote")
 	return nil
 }
 
-func webdavSync() error {
+func webdavPush() error {
 	if !webdavIsConfigured() {
 		return fmt.Errorf("WebDAV not configured. Run 'ghs webdav setup' first")
+	}
+
+	cfg, err := loadWebDAVConfig()
+	if err != nil {
+		return err
 	}
 
 	// Load local config
@@ -323,16 +330,53 @@ func webdavSync() error {
 	if err != nil {
 		return err
 	}
-	if localCfg.Accounts == nil {
-		localCfg.Accounts = make(map[string]Account)
+
+	// Encrypt and upload
+	data, err := json.Marshal(localCfg)
+	if err != nil {
+		return err
+	}
+	blob, err := encryptBlob(data)
+	if err != nil {
+		return err
 	}
 
-	// Download remote config
+	url := strings.TrimSuffix(cfg.URL, "/") + "/ghs-config.enc"
+	req, _ := http.NewRequest("PUT", url, strings.NewReader(blob))
+	req.SetBasicAuth(cfg.User, cfg.Password)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("WebDAV upload failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 409 {
+		folder := strings.TrimSuffix(cfg.URL, "/")
+		if idx := strings.LastIndex(folder, "/"); idx != -1 {
+			folder = folder[idx+1:]
+		}
+		return fmt.Errorf("WebDAV upload failed: 409 Conflict\n  Please create folder '%s/' in your WebDAV root first.", folder)
+	}
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("WebDAV upload failed: %s", resp.Status)
+	}
+
+	printSuccess("pushed %d account(s) to remote", len(localCfg.Accounts))
+	return nil
+}
+
+func webdavPull() error {
+	if !webdavIsConfigured() {
+		return fmt.Errorf("WebDAV not configured. Run 'ghs webdav setup' first")
+	}
+
 	cfg, err := loadWebDAVConfig()
 	if err != nil {
 		return err
 	}
 
+	// Download remote config
 	url := strings.TrimSuffix(cfg.URL, "/") + "/ghs-config.enc"
 	req, _ := http.NewRequest("GET", url, nil)
 	req.SetBasicAuth(cfg.User, cfg.Password)
@@ -343,93 +387,63 @@ func webdavSync() error {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == 404 {
+		printInfo("no remote config found")
+		return nil
+	}
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("WebDAV download failed: %s", resp.Status)
+	}
+
+	blob, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	data, err := decryptBlob(string(blob))
+	if err != nil {
+		return fmt.Errorf("decrypt failed: %w", err)
+	}
+
 	var remoteCfg Config
-	if resp.StatusCode == 200 {
-		blob, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return err
-		}
-		data, err := decryptBlob(string(blob))
-		if err != nil {
-			return fmt.Errorf("decrypt failed: %w", err)
-		}
-		if err := json.Unmarshal(data, &remoteCfg); err != nil {
-			return fmt.Errorf("invalid remote config: %w", err)
-		}
-	}
-	if remoteCfg.Accounts == nil {
-		remoteCfg.Accounts = make(map[string]Account)
+	if err := json.Unmarshal(data, &remoteCfg); err != nil {
+		return fmt.Errorf("invalid remote config: %w", err)
 	}
 
-	// Merge: pull new accounts from remote, push local-only accounts
-	pulled, pushed := 0, 0
-	changed := false
+	// Merge with local config
+	localCfg, err := loadConfig()
+	if err != nil {
+		return err
+	}
+	if localCfg.Accounts == nil {
+		localCfg.Accounts = make(map[string]Account)
+	}
 
-	// Pull: remote accounts not in local
+	added, updated := 0, 0
 	for alias, acc := range remoteCfg.Accounts {
-		if _, exists := localCfg.Accounts[alias]; !exists {
+		if local, exists := localCfg.Accounts[alias]; !exists {
 			localCfg.Accounts[alias] = acc
-			pulled++
-			changed = true
+			added++
+		} else if local.Token == "" && acc.Token != "" {
+			localCfg.Accounts[alias] = acc
+			updated++
 		}
 	}
 
-	// Push: local accounts not in remote
-	for alias, acc := range localCfg.Accounts {
-		if _, exists := remoteCfg.Accounts[alias]; !exists {
-			remoteCfg.Accounts[alias] = acc
-			pushed++
-		}
-	}
-
-	// Save local if changed
-	if changed {
+	if added > 0 || updated > 0 {
 		if err := saveConfig(localCfg); err != nil {
 			return err
 		}
 	}
 
-	// Upload if there are local-only accounts
-	if pushed > 0 {
-		data, err := json.Marshal(localCfg)
-		if err != nil {
-			return err
-		}
-		blob, err := encryptBlob(data)
-		if err != nil {
-			return err
-		}
-
-		req2, _ := http.NewRequest("PUT", url, strings.NewReader(blob))
-		req2.SetBasicAuth(cfg.User, cfg.Password)
-
-		resp2, err := http.DefaultClient.Do(req2)
-		if err != nil {
-			return fmt.Errorf("WebDAV upload failed: %w", err)
-		}
-		resp2.Body.Close()
-
-		if resp2.StatusCode == 409 {
-			// Extract folder name from URL
-			folder := strings.TrimSuffix(cfg.URL, "/")
-			if idx := strings.LastIndex(folder, "/"); idx != -1 {
-				folder = folder[idx+1:]
-			}
-			return fmt.Errorf("WebDAV upload failed: 409 Conflict\n  Please create folder '%s/' in your WebDAV root first.", folder)
-		}
-		if resp2.StatusCode >= 400 {
-			return fmt.Errorf("WebDAV upload failed: %s", resp2.Status)
-		}
-	}
-
-	if pulled == 0 && pushed == 0 {
-		printSuccess("already in sync")
+	if added == 0 && updated == 0 {
+		printSuccess("already up to date")
 	} else {
-		if pulled > 0 {
-			printSuccess("pulled %d account(s) from remote", pulled)
+		if added > 0 {
+			printSuccess("added %d account(s)", added)
 		}
-		if pushed > 0 {
-			printSuccess("pushed %d account(s) to remote", pushed)
+		if updated > 0 {
+			printSuccess("updated %d account(s)", updated)
 		}
 	}
 

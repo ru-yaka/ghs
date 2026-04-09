@@ -112,7 +112,8 @@ Usage:
   ghs sync export              Export encrypted accounts (copy to other machine)
   ghs sync import              Import accounts from encrypted data
   ghs webdav setup             Configure WebDAV for automatic sync
-  ghs webdav sync              Manual sync with WebDAV
+  ghs webdav push              Push accounts to WebDAV
+  ghs webdav pull              Pull accounts from WebDAV
   ghs webdav status            Show WebDAV configuration
   ghs push [--public]           Push (auto-create repo if needed)
   ghs update [version]          Self-upgrade to latest (or specific version)
