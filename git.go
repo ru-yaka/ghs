@@ -17,6 +17,7 @@ type Commit struct {
 
 func gitExec(args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
+	cmd.Env = append(os.Environ(), "FILTER_BRANCH_SQUELCH_WARNING=1")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("%s (%w)", strings.TrimSpace(string(out)), err)

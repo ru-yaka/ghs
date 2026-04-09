@@ -441,6 +441,16 @@ func fixInPlace(alias string, acc *Account) error {
 		return nil
 	}
 
+	// Stash any uncommitted changes
+	stashed := false
+	if out, _ := gitExec("status", "--porcelain"); out != "" {
+		printInfo("stashing uncommitted changes...")
+		if _, err := gitExec("stash", "--include-untracked"); err != nil {
+			return fmt.Errorf("cannot stash changes: %w", err)
+		}
+		stashed = true
+	}
+
 	// Use git filter-branch to rewrite author
 	filterScript := fmt.Sprintf(
 		`if [ "$GIT_AUTHOR_EMAIL" != "%s" ]; then `+
@@ -456,9 +466,22 @@ func fixInPlace(alias string, acc *Account) error {
 	)
 
 	printInfo("rewriting commits...")
-	_, err = gitExec("filter-branch", "-f", "--env-filter", filterScript, "--", "--all")
+	_, err = gitExec("-c", "advice.detachedHead=false", "filter-branch", "-f", "--env-filter", filterScript, "--", "--all")
 	if err != nil {
+		// Restore stashed changes on failure
+		if stashed {
+			gitExec("stash", "pop")
+		}
 		return fmt.Errorf("git filter-branch failed: %w", err)
+	}
+
+	// Restore stashed changes
+	if stashed {
+		printInfo("restoring stashed changes...")
+		if _, err := gitExec("stash", "pop"); err != nil {
+			printError("failed to restore stash: %s", err)
+			printInfo("run 'git stash pop' manually")
+		}
 	}
 
 	printSuccess("%d commit(s) rewritten", len(wrongCommits))
