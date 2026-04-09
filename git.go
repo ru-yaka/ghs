@@ -18,7 +18,10 @@ type Commit struct {
 func gitExec(args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	out, err := cmd.CombinedOutput()
-	return strings.TrimSpace(string(out)), err
+	if err != nil {
+		return "", fmt.Errorf("%s (%w)", strings.TrimSpace(string(out)), err)
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 func gitConfigSet(key, value string) error {
