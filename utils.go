@@ -99,21 +99,25 @@ func printUsage() {
 	fmt.Printf(`ghs - Git & GitHub account switcher v%s
 
 Usage:
-  ghs add <alias> [flags]       Add account (auto-imports gh token)
+  ghs add <name> [flags]        Add account (auto-imports gh token)
   ghs import [--force]          Import accounts from gh CLI
-  ghs remove <alias>            Remove saved account
+  ghs remove <name>             Remove saved account
   ghs clear                     Remove all accounts
-  ghs use <alias>               Switch git/gh to account
+  ghs use <name>                Switch git/gh to account
   ghs list                      List saved accounts
-  ghs repos [alias]             List GitHub repos (all accounts or specific one)
+  ghs repos [name]              List GitHub repos (all accounts or specific one)
   ghs whoami                    Show current git/gh identity
-  ghs fix <repo> [alias]        Rewrite commits + switch + force push
+  ghs fix <repo> [name]         Rewrite commits + switch + push
                                  repo: URL, owner/repo, or "." for current dir
   ghs sync export              Export encrypted accounts (copy to other machine)
   ghs sync import              Import accounts from encrypted data
-  ghs refresh [alias]          Refresh GitHub token (default: current gh user)
+  ghs refresh [name]           Refresh GitHub token (default: current gh user)
   ghs push [--public]           Push (auto-create repo if needed)
   ghs update [version]          Self-upgrade to latest (or specific version)
+
+<name> is the GitHub username or a unique fragment for quick matching.
+  ghs use ru-yaka    # full name
+  ghs use ru         # fragment matches ru-yaka
 
 Flags for 'add':
   -e, --email <email>          Author email (default: current git config)
@@ -123,13 +127,11 @@ Flags for 'push':
   --public                     Create public repo (default: private)
 
 Examples:
-  ghs add work -e jane@company.com
   ghs import                    # import all gh CLI accounts
-  ghs use work                  # switch to work account
+  ghs use ru                    # switch to ru-yaka (fragment match)
   ghs fix .                     # fix current repo with default account
-  ghs fix . work                # fix current repo with work account
+  ghs fix . ru                  # fix current repo with ru-yaka
   ghs fix owner/repo            # clone + fix repo with default account
-  ghs fix owner/repo work       # clone + fix repo with work account
 `, version)
 }
 

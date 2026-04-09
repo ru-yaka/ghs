@@ -189,14 +189,20 @@ func cmdUse(args []string) error {
 		return err
 	}
 
-	// Switch git user — use resolved alias as name
-	if err := gitConfigSet("user.name", resolved); err != nil {
+	// Use GitHub username as git user.name (not the alias)
+	gitUserName := acc.GhUser
+	if gitUserName == "" {
+		gitUserName = resolved
+	}
+
+	// Switch git user
+	if err := gitConfigSet("user.name", gitUserName); err != nil {
 		return fmt.Errorf("failed to set git user.name: %w", err)
 	}
 	if err := gitConfigSet("user.email", acc.Email); err != nil {
 		return fmt.Errorf("failed to set git user.email: %w", err)
 	}
-	printSuccess("git → %s <%s>", resolved, acc.Email)
+	printSuccess("git → %s <%s>", gitUserName, acc.Email)
 
 	// Switch gh auth if token available
 	if acc.Token != "" {
@@ -218,8 +224,8 @@ func cmdUse(args []string) error {
 	}
 
 	// Remember for this repo
-	if err := setRepoAccount(resolved); err == nil {
-		printInfo("'%s' set as default for this repository", resolved)
+	if err := setRepoAccount(gitUserName); err == nil {
+		printInfo("'%s' set as default for this repository", gitUserName)
 	}
 
 	return nil
@@ -295,8 +301,13 @@ func cmdFix(args []string) error {
 	// Resolve account
 	var acc *Account
 	var err error
+	var resolvedAlias string // The resolved alias (e.g., "ru-yaka" from "ru")
 	if alias != "" {
-		acc, err = getAccount(alias)
+		resolvedAlias, err = resolveAlias(alias)
+		if err != nil {
+			return err
+		}
+		acc, err = getAccount(resolvedAlias)
 	} else if repo != "." {
 		// For remote repos, default to account matching the repo owner
 		acc, err = getAccountByRepoOwner(repo)
@@ -304,25 +315,35 @@ func cmdFix(args []string) error {
 			printInfo("%s", err)
 			acc, err = getDefaultAccount()
 		}
+		if acc != nil {
+			resolvedAlias = acc.GhUser
+			if resolvedAlias == "" {
+				resolvedAlias = findAliasByEmail(acc.Email)
+			}
+		}
 	} else {
 		acc, err = getDefaultAccount()
+		if acc != nil {
+			resolvedAlias = acc.GhUser
+			if resolvedAlias == "" {
+				resolvedAlias = findAliasByEmail(acc.Email)
+			}
+		}
 	}
 	if err != nil {
 		return err
 	}
 
-	// Resolve alias for git user.name (use GhUser or alias)
-	if alias == "" {
-		alias = acc.GhUser
-		if alias == "" {
-			alias = findAliasByEmail(acc.Email)
-		}
+	// Use GitHub username as git user.name (not the alias fragment)
+	gitUserName := acc.GhUser
+	if gitUserName == "" {
+		gitUserName = resolvedAlias
 	}
 
 	if repo == "." {
-		return fixInPlace(alias, acc)
+		return fixInPlace(gitUserName, acc)
 	}
-	return cloneAndFix(repo, alias, acc)
+	return cloneAndFix(repo, gitUserName, acc)
 }
 
 // cloneAndFix clones a remote repo to a temp directory, fixes it, pushes, and cleans up.
@@ -518,8 +539,31 @@ func fixInPlace(alias string, acc *Account) error {
 		}
 		printSuccess("pushed to %s", upstream)
 	} else {
-		fmt.Println("\n  ⚠ No upstream set. Push manually:")
-		fmt.Println("    git push -u origin <branch>")
+		// No upstream - try to create repo and push
+		branch, _ := getCurrentBranch()
+		if ghIsInstalled() && acc.Token != "" {
+			printInfo("no upstream - creating repo and pushing...")
+			// Use cmdPush logic
+			if !hasRemote("origin") {
+				repoName, err := getRepoName()
+				if err != nil {
+					repoName = "my-project"
+				}
+				url, err := ghCreateRepo(repoName, "private", "origin")
+				if err != nil {
+					return fmt.Errorf("failed to create repo: %w", err)
+				}
+				printSuccess("repo created: %s", url)
+			}
+			out, err := gitExec("push", "-u", "origin", branch)
+			if err != nil {
+				return fmt.Errorf("push failed: %s", out)
+			}
+			printSuccess("pushed to origin/%s", branch)
+		} else {
+			fmt.Println("\n  ⚠ No upstream set and no gh CLI/token. Push manually:")
+			fmt.Println("    git push -u origin <branch>")
+		}
 	}
 
 	return nil
