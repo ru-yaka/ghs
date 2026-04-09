@@ -6,6 +6,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 )
 
 func main() {
@@ -44,6 +45,8 @@ func main() {
 		err = cmdFix(args)
 	case "sync":
 		err = cmdSync(args)
+	case "refresh":
+		err = cmdRefresh(args)
 	case "update", "upgrade":
 		err = cmdUpdate(args)
 	case "help", "--help", "-h":
@@ -100,6 +103,73 @@ func cmdImport(args []string) error {
 		}
 	}
 	return importGhAccounts(force)
+}
+
+// cmdRefresh handles: ghs refresh [alias]
+func cmdRefresh(args []string) error {
+	if !ghIsInstalled() {
+		return fmt.Errorf("gh CLI not installed")
+	}
+
+	// Determine which account to refresh
+	var alias string
+	if len(args) > 0 {
+		alias = args[0]
+	} else {
+		// Use current gh user
+		ghUser, err := ghGetUser()
+		if err != nil {
+			return fmt.Errorf("cannot determine current gh user: %w", err)
+		}
+		alias = ghUser
+	}
+
+	resolved, err := resolveAlias(alias)
+	if err != nil {
+		return err
+	}
+
+	acc, err := getAccount(alias)
+	if err != nil {
+		return err
+	}
+
+	// Switch to this account first
+	if acc.Token != "" {
+		if err := ghLoginWithToken(acc.Token); err != nil {
+			printError("gh auth switch failed: %s", err)
+		}
+	}
+
+	printInfo("refreshing token for '%s'...", resolved)
+	printInfo("please complete the auth flow in your browser...")
+
+	// Run gh auth refresh
+	if err := ghAuthRefresh(); err != nil {
+		return fmt.Errorf("gh auth refresh failed: %w", err)
+	}
+
+	// Get the new token
+	newToken, err := ghGetToken()
+	if err != nil {
+		return fmt.Errorf("cannot get new token: %w", err)
+	}
+
+	// Update the account
+	cfg, err := loadConfig()
+	if err != nil {
+		return err
+	}
+	acc.Token = newToken
+	acc.TokenUpdatedAt = time.Now().Format("2006-01-02 15:04")
+	cfg.Accounts[resolved] = *acc
+
+	if err := saveConfig(cfg); err != nil {
+		return err
+	}
+
+	printSuccess("token refreshed for '%s'", resolved)
+	return nil
 }
 
 // cmdUse handles: ghs use <alias>

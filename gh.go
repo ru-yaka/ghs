@@ -65,6 +65,19 @@ func ghLoginWithToken(token string) error {
 	return nil
 }
 
+// ghAuthRefresh refreshes the auth token for the current gh user.
+func ghAuthRefresh() error {
+	ghExe, err := gh.Path()
+	if err != nil {
+		return fmt.Errorf("gh CLI not found: %w", err)
+	}
+	cmd := exec.Command(ghExe, "auth", "refresh", "--hostname", "github.com")
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
 // ghExec runs a gh command and returns combined output.
 func ghExec(args ...string) (string, error) {
 	stdout, stderr, err := gh.Exec(args...)

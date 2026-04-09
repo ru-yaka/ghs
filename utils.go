@@ -111,6 +111,7 @@ Usage:
                                  repo: URL, owner/repo, or "." for current dir
   ghs sync export              Export encrypted accounts (copy to other machine)
   ghs sync import              Import accounts from encrypted data
+  ghs refresh [alias]          Refresh GitHub token (default: current gh user)
   ghs push [--public]           Push (auto-create repo if needed)
   ghs update [version]          Self-upgrade to latest (or specific version)
 

@@ -7,12 +7,14 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
 type Account struct {
-	Email  string `json:"email"`
-	Token  string `json:"token,omitempty"`
-	GhUser string `json:"gh_user,omitempty"`
+	Email          string `json:"email"`
+	Token          string `json:"token,omitempty"`
+	GhUser         string `json:"gh_user,omitempty"`
+	TokenUpdatedAt string `json:"token_updated_at,omitempty"` // local time, human readable
 }
 
 type Config struct {
@@ -128,6 +130,20 @@ func addAccount(alias, email, token string) error {
 		Email:  email,
 		Token:  token,
 		GhUser: ghUser,
+	}
+	if token != "" {
+		cfg.Accounts[alias] = Account{
+			Email:          email,
+			Token:          token,
+			GhUser:         ghUser,
+			TokenUpdatedAt: time.Now().Format("2006-01-02 15:04"),
+		}
+	} else {
+		cfg.Accounts[alias] = Account{
+			Email:  email,
+			Token:  token,
+			GhUser: ghUser,
+		}
 	}
 
 	if err := saveConfig(cfg); err != nil {
@@ -268,7 +284,11 @@ func listAccounts() error {
 	for alias, acc := range cfg.Accounts {
 		tokenStatus := "no token"
 		if acc.Token != "" {
-			tokenStatus = "has token"
+			if acc.TokenUpdatedAt != "" {
+				tokenStatus = "token updated " + acc.TokenUpdatedAt
+			} else {
+				tokenStatus = "has token"
+			}
 		}
 		line := fmt.Sprintf("  %-12s <%s>  [%s]", alias, acc.Email, tokenStatus)
 		if acc.GhUser != "" {
@@ -315,9 +335,10 @@ func importGhAccounts(overwrite bool) error {
 		email := h.User + "@users.noreply.github.com"
 
 		cfg.Accounts[alias] = Account{
-			Email:  email,
-			Token:  h.Token,
-			GhUser: h.User,
+			Email:          email,
+			Token:          h.Token,
+			GhUser:         h.User,
+			TokenUpdatedAt: time.Now().Format("2006-01-02 15:04"),
 		}
 		fmt.Printf("  ✓ %-15s <%s>  token:****%s\n", alias, email, truncateToken(h.Token))
 		imported++
