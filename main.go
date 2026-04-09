@@ -430,10 +430,10 @@ func fixInPlace(alias string, acc *Account) error {
 		return nil
 	}
 
-	// Find commits with wrong author
+	// Find commits with wrong author (check both name and email)
 	var wrongCommits []Commit
 	for _, c := range commits {
-		if c.AuthorEmail != acc.Email {
+		if c.AuthorEmail != acc.Email || c.AuthorName != alias {
 			wrongCommits = append(wrongCommits, c)
 		}
 	}
