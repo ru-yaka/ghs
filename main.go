@@ -692,7 +692,31 @@ func cmdPush(args []string) error {
 	}
 
 	if err := push(*remoteName, branch, setUpstream); err != nil {
-		return err
+		// If push failed with "not found", the remote repo doesn't exist — create it and retry
+		if remoteExists && ghIsInstalled() && (strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "Repository not found")) {
+			repoName, nameErr := getRepoName()
+			if nameErr != nil {
+				repoName = "my-project"
+			}
+
+			visibility := "private"
+			if *isPublic {
+				visibility = "public"
+			}
+
+			printInfo("remote repo not found — creating GitHub repo '%s' (%s)...", repoName, visibility)
+			url, createErr := ghCreateRepo(repoName, visibility, *remoteName)
+			if createErr != nil {
+				return fmt.Errorf("push failed and repo creation also failed: %s", err)
+			}
+			printSuccess("repo created: %s", url)
+
+			if err := push(*remoteName, branch, setUpstream); err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
 	}
 
 	printSuccess("pushed to %s", pushLabel)
