@@ -187,8 +187,10 @@ func cmdApply(args []string) error {
 		return fmt.Errorf("cannot get current gh user: %w", err)
 	}
 
-	// Fetch info from GitHub API
-	realName, _ := ghGetUserRealName()
+	// git user.name = GitHub login (username)
+	gitName := ghUser
+
+	// Fetch email from GitHub API
 	email, emailErr := ghGetUserEmail()
 
 	// Load saved config for fallback and update
@@ -210,12 +212,6 @@ func cmdApply(args []string) error {
 	if email == "" {
 		email = ghUser + "@users.noreply.github.com"
 		printInfo("cannot fetch email from GitHub, using noreply: %s", email)
-	}
-
-	// git user.name: prefer real name, fall back to username
-	gitName := ghUser
-	if realName != "" {
-		gitName = realName
 	}
 
 	// Check current git config

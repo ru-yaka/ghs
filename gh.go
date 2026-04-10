@@ -258,19 +258,6 @@ func ghImportHosts() ([]GhHostInfo, error) {
 	return result, nil
 }
 
-// ghGetUserRealName fetches the user's display name from GitHub profile.
-// Returns empty string if no name is set.
-func ghGetUserRealName() (string, error) {
-	out, err := ghExec("api", "user", "-q", ".name")
-	if err != nil {
-		return "", err
-	}
-	if out == "" || out == "null" {
-		return "", nil
-	}
-	return out, nil
-}
-
 // ghGetUserEmail fetches the user's primary verified email from GitHub API.
 func ghGetUserEmail() (string, error) {
 	out, err := ghExec("api", "user/emails")
