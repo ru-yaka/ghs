@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -258,46 +257,17 @@ func ghImportHosts() ([]GhHostInfo, error) {
 	return result, nil
 }
 
-// ghGetUserEmail fetches the user's primary verified email from GitHub API.
-func ghGetUserEmail() (string, error) {
-	out, err := ghExec("api", "user/emails")
+// ghGetUserNoreplyEmail builds the GitHub noreply email from user info.
+// Format: {id}+{login}@users.noreply.github.com
+// This works even when email privacy is enabled and no extra scopes are needed.
+func ghGetUserNoreplyEmail() (string, error) {
+	out, err := ghExec("api", "user", "-q", ".id,.login")
 	if err != nil {
-		return "", fmt.Errorf("cannot fetch emails: %w", err)
+		return "", fmt.Errorf("cannot fetch user info: %w", err)
 	}
-
-	type emailEntry struct {
-		Email    string `json:"email"`
-		Primary  bool   `json:"primary"`
-		Verified bool   `json:"verified"`
+	parts := strings.SplitN(out, "\n", 2)
+	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
+		return "", fmt.Errorf("cannot parse user id/login")
 	}
-
-	var emails []emailEntry
-	if err := json.Unmarshal([]byte(out), &emails); err != nil {
-		return "", fmt.Errorf("cannot parse emails: %w", err)
-	}
-
-	// Prefer primary verified email
-	for _, e := range emails {
-		if e.Primary && e.Verified {
-			return e.Email, nil
-		}
-	}
-	// Any verified email
-	for _, e := range emails {
-		if e.Verified {
-			return e.Email, nil
-		}
-	}
-	// Primary email (even unverified)
-	for _, e := range emails {
-		if e.Primary {
-			return e.Email, nil
-		}
-	}
-	// Any email at all
-	if len(emails) > 0 {
-		return emails[0].Email, nil
-	}
-
-	return "", fmt.Errorf("no email found")
+	return fmt.Sprintf("%s+%s@users.noreply.github.com", parts[0], parts[1]), nil
 }

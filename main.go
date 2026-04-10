@@ -190,29 +190,14 @@ func cmdApply(args []string) error {
 	// git user.name = GitHub login (username)
 	gitName := ghUser
 
-	// Fetch email from GitHub API
-	email, emailErr := ghGetUserEmail()
+	// Fetch email: try user/emails API, then build noreply from user id
+	email, err := ghGetUserNoreplyEmail()
+	if err != nil {
+		return fmt.Errorf("cannot determine email: %w", err)
+	}
 
-	// Load saved config for fallback and update
+	// Load saved config for update
 	cfg, _ := loadConfig()
-
-	// Email fallback chain: user/emails → user.email → saved account → noreply
-	if emailErr != nil {
-		if pubEmail, e := ghExec("api", "user", "-q", ".email"); e == nil && pubEmail != "" && pubEmail != "null" {
-			email = pubEmail
-		} else {
-			for _, acc := range cfg.Accounts {
-				if acc.GhUser == ghUser && acc.Email != "" {
-					email = acc.Email
-					break
-				}
-			}
-		}
-	}
-	if email == "" {
-		email = ghUser + "@users.noreply.github.com"
-		printInfo("cannot fetch email from GitHub, using noreply: %s", email)
-	}
 
 	// Check current git config
 	curName, curEmail, _ := getCurrentUser()
