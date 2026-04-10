@@ -47,6 +47,8 @@ func main() {
 		err = cmdSync(args)
 	case "refresh":
 		err = cmdRefresh(args)
+	case "apply":
+		err = cmdApply(args)
 	case "update", "upgrade":
 		err = cmdUpdate(args)
 	case "help", "--help", "-h":
@@ -169,6 +171,93 @@ func cmdRefresh(args []string) error {
 	}
 
 	printSuccess("token refreshed for '%s'", resolved)
+	return nil
+}
+
+// cmdApply handles: ghs apply
+// Syncs current gh user info (name, email) to git config.
+// Fetches the latest info from GitHub API.
+func cmdApply(args []string) error {
+	if !ghIsInstalled() {
+		return fmt.Errorf("gh CLI not installed")
+	}
+
+	ghUser, err := ghGetUser()
+	if err != nil {
+		return fmt.Errorf("cannot get current gh user: %w", err)
+	}
+
+	// Fetch info from GitHub API
+	realName, _ := ghGetUserRealName()
+	email, emailErr := ghGetUserEmail()
+
+	// Load saved config for fallback and update
+	cfg, _ := loadConfig()
+
+	// Email fallback chain: user/emails → user.email → saved account → noreply
+	if emailErr != nil {
+		if pubEmail, e := ghExec("api", "user", "-q", ".email"); e == nil && pubEmail != "" && pubEmail != "null" {
+			email = pubEmail
+		} else {
+			for _, acc := range cfg.Accounts {
+				if acc.GhUser == ghUser && acc.Email != "" {
+					email = acc.Email
+					break
+				}
+			}
+		}
+	}
+	if email == "" {
+		email = ghUser + "@users.noreply.github.com"
+		printInfo("cannot fetch email from GitHub, using noreply: %s", email)
+	}
+
+	// git user.name: prefer real name, fall back to username
+	gitName := ghUser
+	if realName != "" {
+		gitName = realName
+	}
+
+	// Check current git config
+	curName, curEmail, _ := getCurrentUser()
+	if curName == gitName && curEmail == email {
+		printSuccess("git config already matches: %s <%s>", gitName, email)
+		return nil
+	}
+
+	// Show changes
+	if curName != gitName {
+		printInfo("user.name: %s → %s", curName, gitName)
+	}
+	if curEmail != email {
+		printInfo("user.email: %s → %s", curEmail, email)
+	}
+
+	// Set git config
+	if err := gitConfigSet("user.name", gitName); err != nil {
+		return fmt.Errorf("failed to set git user.name: %w", err)
+	}
+	if err := gitConfigSet("user.email", email); err != nil {
+		return fmt.Errorf("failed to set git user.email: %w", err)
+	}
+
+	printSuccess("git → %s <%s>", gitName, email)
+
+	// Update saved account
+	updated := false
+	for alias, acc := range cfg.Accounts {
+		if acc.GhUser == ghUser {
+			acc.Email = email
+			cfg.Accounts[alias] = acc
+			updated = true
+			break
+		}
+	}
+	if updated {
+		saveConfig(cfg)
+		printInfo("updated saved account")
+	}
+
 	return nil
 }
 

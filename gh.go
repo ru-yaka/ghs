@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -255,4 +256,61 @@ func ghImportHosts() ([]GhHostInfo, error) {
 	}
 
 	return result, nil
+}
+
+// ghGetUserRealName fetches the user's display name from GitHub profile.
+// Returns empty string if no name is set.
+func ghGetUserRealName() (string, error) {
+	out, err := ghExec("api", "user", "-q", ".name")
+	if err != nil {
+		return "", err
+	}
+	if out == "" || out == "null" {
+		return "", nil
+	}
+	return out, nil
+}
+
+// ghGetUserEmail fetches the user's primary verified email from GitHub API.
+func ghGetUserEmail() (string, error) {
+	out, err := ghExec("api", "user/emails")
+	if err != nil {
+		return "", fmt.Errorf("cannot fetch emails: %w", err)
+	}
+
+	type emailEntry struct {
+		Email    string `json:"email"`
+		Primary  bool   `json:"primary"`
+		Verified bool   `json:"verified"`
+	}
+
+	var emails []emailEntry
+	if err := json.Unmarshal([]byte(out), &emails); err != nil {
+		return "", fmt.Errorf("cannot parse emails: %w", err)
+	}
+
+	// Prefer primary verified email
+	for _, e := range emails {
+		if e.Primary && e.Verified {
+			return e.Email, nil
+		}
+	}
+	// Any verified email
+	for _, e := range emails {
+		if e.Verified {
+			return e.Email, nil
+		}
+	}
+	// Primary email (even unverified)
+	for _, e := range emails {
+		if e.Primary {
+			return e.Email, nil
+		}
+	}
+	// Any email at all
+	if len(emails) > 0 {
+		return emails[0].Email, nil
+	}
+
+	return "", fmt.Errorf("no email found")
 }

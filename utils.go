@@ -112,6 +112,7 @@ Usage:
   ghs sync export              Export encrypted accounts (copy to other machine)
   ghs sync import              Import accounts from encrypted data
   ghs refresh [name]           Refresh GitHub token (default: current gh user)
+  ghs apply                     Sync gh user info (name, email) to git config
   ghs push [--public]           Push (auto-create repo if needed)
   ghs update [version]          Self-upgrade to latest (or specific version)
 
@@ -129,6 +130,7 @@ Flags for 'push':
 Examples:
   ghs import                    # import all gh CLI accounts
   ghs use ru                    # switch to ru-yaka (fragment match)
+  ghs apply                     # sync current gh user info to git
   ghs fix .                     # fix current repo with default account
   ghs fix . ru                  # fix current repo with ru-yaka
   ghs fix owner/repo            # clone + fix repo with default account
