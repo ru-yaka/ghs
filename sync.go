@@ -91,6 +91,15 @@ func syncImport() error {
 		}
 		localCfg.Accounts[alias] = acc
 		added++
+
+		// Also login to gh CLI if token available
+		if acc.Token != "" && ghIsInstalled() {
+			if err := ghLoginWithToken(acc.Token); err != nil {
+				printError("gh auth login failed for '%s': %s", alias, err)
+			} else {
+				printInfo("gh auth: logged in as %s", acc.GhUser)
+			}
+		}
 	}
 
 	if added == 0 {
