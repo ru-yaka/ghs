@@ -603,9 +603,9 @@ func fixInPlace(alias string, acc *Account) error {
 		upstream, _ := gitExec("rev-parse", "--abbrev-ref", "@{u}")
 		branch, _ := getCurrentBranch()
 		printInfo("force pushing to %s...", upstream)
-		out, err := gitExec("push", "--force", "origin", branch)
+		_, err = gitExec("push", "--force", "origin", branch)
 		if err != nil {
-			return fmt.Errorf("force push failed: %s", out)
+			return fmt.Errorf("force push failed: %s", err)
 		}
 		printSuccess("pushed to %s", upstream)
 	} else {
@@ -625,9 +625,9 @@ func fixInPlace(alias string, acc *Account) error {
 				}
 				printSuccess("repo created: %s", url)
 			}
-			out, err := gitExec("push", "-u", "origin", branch)
+			_, err = gitExec("push", "-u", "origin", branch)
 			if err != nil {
-				return fmt.Errorf("push failed: %s", out)
+				return fmt.Errorf("push failed: %s", err)
 			}
 			printSuccess("pushed to origin/%s", branch)
 		} else {
