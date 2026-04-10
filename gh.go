@@ -100,20 +100,39 @@ func ghExecWithStdin(args []string, stdin io.Reader) (string, error) {
 }
 
 // ghCreateRepo creates a GitHub repository and sets up the remote.
+// If the remote already exists, it updates the URL after creation.
 func ghCreateRepo(name, visibility, remoteName string) (string, error) {
-	result, err := ghExec("repo", "create", name, "--"+visibility,
-		"--source=.", "--remote="+remoteName, "--push=false")
+	remoteAlreadyExists := hasRemote(remoteName)
+
+	args := []string{"repo", "create", name, "--" + visibility, "--source=.", "--push=false"}
+	if !remoteAlreadyExists {
+		args = append(args, "--remote="+remoteName)
+	}
+
+	result, err := ghExec(args...)
 	if err != nil {
 		return "", fmt.Errorf("gh repo create failed: %w", err)
 	}
+
 	// Parse URL from output
+	var repoURL string
 	for _, line := range strings.Split(result, "\n") {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "https://github.com/") || strings.HasPrefix(line, "git@github.com:") {
-			return line, nil
+			repoURL = line
+			break
 		}
 	}
-	return result, nil
+	if repoURL == "" {
+		repoURL = result
+	}
+
+	// Update existing remote URL to point to new repo
+	if remoteAlreadyExists && repoURL != "" {
+		gitExec("remote", "set-url", remoteName, repoURL)
+	}
+
+	return repoURL, nil
 }
 
 // ghGetRepoURL gets the current repo's URL via gh CLI.

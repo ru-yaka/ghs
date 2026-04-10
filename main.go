@@ -707,7 +707,7 @@ func cmdPush(args []string) error {
 			printInfo("remote repo not found — creating GitHub repo '%s' (%s)...", repoName, visibility)
 			url, createErr := ghCreateRepo(repoName, visibility, *remoteName)
 			if createErr != nil {
-				return fmt.Errorf("push failed and repo creation also failed: %s", err)
+				return fmt.Errorf("push failed and repo creation also failed: %s", createErr)
 			}
 			printSuccess("repo created: %s", url)
 
