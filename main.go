@@ -542,28 +542,43 @@ func fixInPlace(alias string, acc *Account) error {
 		stashed = true
 	}
 
-	// Use git filter-branch to rewrite author
-	filterScript := fmt.Sprintf(
-		`if [ "$GIT_AUTHOR_EMAIL" != "%s" ]; then `+
-			`export GIT_AUTHOR_NAME="%s"; `+
-			`export GIT_AUTHOR_EMAIL="%s"; `+
-			`fi; `+
-			`if [ "$GIT_COMMITTER_EMAIL" != "%s" ]; then `+
-			`export GIT_COMMITTER_NAME="%s"; `+
-			`export GIT_COMMITTER_EMAIL="%s"; `+
-			`fi`,
-		acc.Email, alias, acc.Email,
-		acc.Email, alias, acc.Email,
-	)
+	// Collect unique wrong emails for mailmap
+	wrongEmails := make(map[string]bool)
+	for _, c := range wrongCommits {
+		if c.AuthorEmail != acc.Email {
+			wrongEmails[c.AuthorEmail] = true
+		}
+	}
 
-	printInfo("rewriting commits...")
-	_, err = gitExec("-c", "advice.detachedHead=false", "filter-branch", "-f", "--env-filter", filterScript, "--", "--all")
+	// Write temporary mailmap file
+	tmpFile, err := os.CreateTemp("", "ghs-mailmap-*")
 	if err != nil {
-		// Restore stashed changes on failure
+		return fmt.Errorf("cannot create mailmap: %w", err)
+	}
+	for oldEmail := range wrongEmails {
+		fmt.Fprintf(tmpFile, "%s <%s> <%s>\n", alias, acc.Email, oldEmail)
+	}
+	tmpFile.Close()
+	defer os.Remove(tmpFile.Name())
+
+	// Save remote URL (git-filter-repo removes remotes)
+	var remoteURL string
+	if url, err := getRemoteURL("origin"); err == nil {
+		remoteURL = url
+	}
+
+	// Rewrite with git-filter-repo --mailmap
+	printInfo("rewriting commits...")
+	if err := filterRepoRewrite(tmpFile.Name()); err != nil {
 		if stashed {
 			gitExec("stash", "pop")
 		}
-		return fmt.Errorf("git filter-branch failed: %w", err)
+		return err
+	}
+
+	// Restore remote
+	if remoteURL != "" && !hasRemote("origin") {
+		gitExec("remote", "add", "origin", remoteURL)
 	}
 
 	// Restore stashed changes
