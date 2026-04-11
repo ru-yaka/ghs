@@ -134,51 +134,53 @@ func cmdDelete(args []string) error {
 	}
 
 	// Concurrent delete
-	scopeRefreshed := false
-	var mu sync.Mutex
+	refreshCh := make(chan struct{}) // closed after scope refresh completes
+	var refreshOnce sync.Once
 	var wg sync.WaitGroup
+
+	// tokenFor returns an up-to-date token for a repo's owner.
+	tokenFor := func(fullName string) string {
+		for _, acc := range accounts {
+			if strings.HasPrefix(fullName, acc.ghUser+"/") {
+				return acc.token
+			}
+		}
+		return ""
+	}
 
 	for _, it := range items {
 		wg.Add(1)
 		go func(item deleteItem) {
 			defer wg.Done()
 			err := deleteRepo(item.fullName, item.token)
-			if err != nil {
-				if strings.Contains(err.Error(), "delete_repo") {
-					mu.Lock()
-					if !scopeRefreshed {
-						scopeRefreshed = true
-						mu.Unlock()
-						printInfo("requesting delete_repo permission...")
-						if refreshErr := cmdRefreshWithScopes([]string{"delete_repo"}); refreshErr != nil {
-							printError("failed to refresh scope: %s", refreshErr)
-							return
-						}
-						// Reload all tokens
-						newCfg, _ := loadConfig()
-						for alias, acc := range newCfg.Accounts {
-							if acc.Token != "" {
-								accounts[alias] = accountInfo{ghUser: acc.GhUser, token: acc.Token}
-							}
-						}
-						// Find updated token for this item
-						for _, acc := range accounts {
-							if strings.HasPrefix(item.fullName, acc.ghUser+"/") {
-								item.token = acc.token
-							}
-						}
-					} else {
-						mu.Unlock()
-					}
-					// Retry
-					if err = deleteRepo(item.fullName, item.token); err != nil {
-						printError("failed to delete %s: %s", item.fullName, err)
+			if err != nil && strings.Contains(err.Error(), "delete_repo") {
+				// Ensure scope refresh runs exactly once, then all goroutines wait for it
+				refreshOnce.Do(func() {
+					printInfo("requesting delete_repo permission...")
+					if refreshErr := cmdRefreshWithScopes([]string{"delete_repo"}); refreshErr != nil {
+						printError("failed to refresh scope: %s", refreshErr)
+						close(refreshCh)
 						return
 					}
-				} else {
+					// Reload all tokens
+					newCfg, _ := loadConfig()
+					for alias, acc := range newCfg.Accounts {
+						if acc.Token != "" {
+							accounts[alias] = accountInfo{ghUser: acc.GhUser, token: acc.Token}
+						}
+					}
+					close(refreshCh)
+				})
+				<-refreshCh // wait until refresh is done
+				// Retry with updated token
+				item.token = tokenFor(item.fullName)
+				if err = deleteRepo(item.fullName, item.token); err != nil {
 					printError("failed to delete %s: %s", item.fullName, err)
 					return
 				}
+			} else if err != nil {
+				printError("failed to delete %s: %s", item.fullName, err)
+				return
 			}
 			printSuccess("deleted %s", item.fullName)
 		}(it)

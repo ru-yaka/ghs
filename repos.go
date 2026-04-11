@@ -75,11 +75,11 @@ func listReposForAccount(alias string, acc *Account) error {
 	}
 
 	for _, r := range repos {
-		visibility := "public"
 		if r.Private {
-			visibility = "private"
+			fmt.Printf("  %s [private]\n", r.FullName)
+		} else {
+			fmt.Printf("  %s [\x1b[32mpublic\x1b[0m]\n", r.FullName)
 		}
-		fmt.Printf("  %s [%s]\n", r.FullName, visibility)
 		if r.Description != "" {
 			fmt.Printf("    \x1b[90m%s\x1b[0m\n", r.Description)
 		}
