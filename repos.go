@@ -76,12 +76,9 @@ func listReposForAccount(alias string, acc *Account) error {
 
 	for _, r := range repos {
 		if r.Private {
-			fmt.Printf("  %s [private]\n", r.FullName)
+			fmt.Printf("  %s [\x1b[90mprivate\x1b[0m]\n", r.FullName)
 		} else {
 			fmt.Printf("  %s [\x1b[32mpublic\x1b[0m]\n", r.FullName)
-		}
-		if r.Description != "" {
-			fmt.Printf("    \x1b[90m%s\x1b[0m\n", r.Description)
 		}
 	}
 	fmt.Printf("  (%d repo%s)\n", len(repos), plural(len(repos)))
