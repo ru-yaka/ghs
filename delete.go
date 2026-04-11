@@ -7,15 +7,29 @@ import (
 	"sync"
 )
 
-// cmdDelete handles: ghs delete <repo1> [repo2] ... [--yes]
-//
-// Repo names can be bare (e.g. "test-repo") or full (e.g. "ru-yaka/test-repo").
-// Bare names are matched across all accounts' repos. If a name exists under
-// exactly one account, it's resolved automatically. If multiple accounts have
-// a repo with the same name, the user is prompted to pick.
+// cmdDelete handles: ghs delete <repos|users> <names...> [--yes]
 func cmdDelete(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: ghs delete <repo...> [--yes]")
+		return fmt.Errorf("usage: ghs delete repos <repo...> [--yes]\n       ghs delete users <user...> [--yes]")
+	}
+
+	subCmd := args[0]
+	rest := args[1:]
+
+	switch subCmd {
+	case "repo", "repos":
+		return cmdDeleteRepos(rest)
+	case "user", "users":
+		return cmdDeleteUsers(rest)
+	default:
+		return fmt.Errorf("usage: ghs delete repos <repo...> [--yes]\n       ghs delete users <user...> [--yes]")
+	}
+}
+
+// cmdDeleteRepos deletes GitHub repositories.
+func cmdDeleteRepos(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: ghs delete repos <repo...> [--yes]")
 	}
 
 	// Parse args
@@ -29,7 +43,7 @@ func cmdDelete(args []string) error {
 		}
 	}
 	if len(repos) == 0 {
-		return fmt.Errorf("usage: ghs delete <repo...> [--yes]")
+		return fmt.Errorf("usage: ghs delete repos <repo...> [--yes]")
 	}
 
 	cfg, err := loadConfig()
@@ -134,7 +148,7 @@ func cmdDelete(args []string) error {
 	}
 
 	// Concurrent delete
-	refreshCh := make(chan struct{}) // closed after scope refresh completes
+	refreshCh := make(chan struct{})
 	var refreshOnce sync.Once
 	var wg sync.WaitGroup
 
@@ -152,9 +166,8 @@ func cmdDelete(args []string) error {
 		wg.Add(1)
 		go func(item deleteItem) {
 			defer wg.Done()
-			err := deleteRepo(item.fullName, item.token)
+			err := deleteRepoAPI(item.fullName, item.token)
 			if err != nil && strings.Contains(err.Error(), "delete_repo") {
-				// Ensure scope refresh runs exactly once, then all goroutines wait for it
 				refreshOnce.Do(func() {
 					printInfo("requesting delete_repo permission...")
 					if refreshErr := cmdRefreshWithScopes([]string{"delete_repo"}); refreshErr != nil {
@@ -171,10 +184,9 @@ func cmdDelete(args []string) error {
 					}
 					close(refreshCh)
 				})
-				<-refreshCh // wait until refresh is done
-				// Retry with updated token
+				<-refreshCh
 				item.token = tokenFor(item.fullName)
-				if err = deleteRepo(item.fullName, item.token); err != nil {
+				if err = deleteRepoAPI(item.fullName, item.token); err != nil {
 					printError("failed to delete %s: %s", item.fullName, err)
 					return
 				}
@@ -190,8 +202,77 @@ func cmdDelete(args []string) error {
 	return nil
 }
 
-// deleteRepo calls GitHub API to delete a repository.
-func deleteRepo(fullName, token string) error {
+// cmdDeleteUsers removes saved accounts (not GitHub users, just local config).
+func cmdDeleteUsers(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: ghs delete users <user...> [--yes]")
+	}
+
+	// Parse args
+	var users []string
+	skipConfirm := false
+	for _, a := range args {
+		if a == "--yes" || a == "-y" {
+			skipConfirm = true
+		} else {
+			users = append(users, a)
+		}
+	}
+	if len(users) == 0 {
+		return fmt.Errorf("usage: ghs delete users <user...> [--yes]")
+	}
+
+	cfg, err := loadConfig()
+	if err != nil {
+		return err
+	}
+
+	// Resolve each user (supports fragment matching)
+	type resolvedUser struct {
+		alias string
+		ghUser string
+	}
+	var resolved []resolvedUser
+	for _, u := range users {
+		resolvedAlias, err := resolveAlias(u)
+		if err != nil {
+			printError("%s: %s", u, err)
+			continue
+		}
+		acc := cfg.Accounts[resolvedAlias]
+		resolved = append(resolved, resolvedUser{alias: resolvedAlias, ghUser: acc.GhUser})
+	}
+	if len(resolved) == 0 {
+		return fmt.Errorf("no users to delete")
+	}
+
+	// Confirm
+	if !skipConfirm {
+		fmt.Println("Users to delete from ghs config:")
+		for _, u := range resolved {
+			fmt.Printf("  - %s", u.alias)
+			if u.ghUser != "" && u.ghUser != u.alias {
+				fmt.Printf(" (gh: %s)", u.ghUser)
+			}
+			fmt.Println()
+		}
+		if !confirm("Remove these accounts?") {
+			fmt.Println("Cancelled.")
+			return nil
+		}
+	}
+
+	// Delete
+	for _, u := range resolved {
+		delete(cfg.Accounts, u.alias)
+		printSuccess("removed %s", u.alias)
+	}
+
+	return saveConfig(cfg)
+}
+
+// deleteRepoAPI calls GitHub API to delete a repository.
+func deleteRepoAPI(fullName, token string) error {
 	req, err := http.NewRequest("DELETE", "https://api.github.com/repos/"+fullName, nil)
 	if err != nil {
 		return err

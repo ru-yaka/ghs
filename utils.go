@@ -106,7 +106,8 @@ Usage:
   ghs use <name>                Switch git/gh to account
   ghs list                      List saved accounts
   ghs repos [name]              List GitHub repos (all accounts or specific one)
-  ghs delete <repo...> [--yes]  Delete one or more GitHub repos
+  ghs delete repos <repo...> [--yes]  Delete GitHub repos
+  ghs delete users <user...> [--yes]  Remove saved accounts
   ghs whoami                    Show current git/gh identity
   ghs fix <repo> [name]         Rewrite commits + switch + push
                                  repo: URL, owner/repo, or "." for current dir

@@ -319,6 +319,14 @@ func importGhAccounts(overwrite bool) error {
 
 	cfg, _ := loadConfig()
 
+	// Build set of gh users for cleanup
+	ghUsers := make(map[string]bool)
+	for _, h := range hosts {
+		if h.User != "" {
+			ghUsers[h.User] = true
+		}
+	}
+
 	imported := 0
 	for _, h := range hosts {
 		alias := h.User // default alias: gh username
@@ -344,7 +352,21 @@ func importGhAccounts(overwrite bool) error {
 		imported++
 	}
 
-	if imported > 0 {
+	// Remove accounts that no longer exist in gh CLI (only with --force)
+	if overwrite {
+		var removed []string
+		for alias, acc := range cfg.Accounts {
+			if acc.GhUser != "" && !ghUsers[acc.GhUser] {
+				delete(cfg.Accounts, alias)
+				removed = append(removed, alias)
+			}
+		}
+		for _, r := range removed {
+			fmt.Printf("  ✗ %-15s  [removed, not in gh CLI]\n", r)
+		}
+	}
+
+	if imported > 0 || overwrite {
 		if err := saveConfig(cfg); err != nil {
 			return err
 		}
