@@ -81,7 +81,7 @@ func listReposForAccount(alias string, acc *Account) error {
 		}
 		fmt.Printf("  %s [%s]\n", r.FullName, visibility)
 		if r.Description != "" {
-			fmt.Printf("    %s\n", r.Description)
+			fmt.Printf("    \x1b[90m%s\x1b[0m\n", r.Description)
 		}
 	}
 	fmt.Printf("  (%d repo%s)\n", len(repos), plural(len(repos)))

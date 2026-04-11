@@ -34,6 +34,8 @@ func main() {
 		err = listAccounts()
 	case "repos":
 		err = cmdRepos(args)
+	case "delete":
+		err = cmdDelete(args)
 	case "whoami", "status":
 		cmdWhoami()
 		os.Exit(0)
@@ -146,8 +148,11 @@ func cmdRefresh(args []string) error {
 	printInfo("refreshing token for '%s'...", resolved)
 	printInfo("please complete the auth flow in your browser...")
 
+	// Always request these scopes
+	scopes := []string{"delete_repo", "admin:repo_hook"}
+
 	// Run gh auth refresh
-	if err := ghAuthRefresh(); err != nil {
+	if err := ghAuthRefresh(scopes...); err != nil {
 		return fmt.Errorf("gh auth refresh failed: %w", err)
 	}
 
@@ -171,6 +176,55 @@ func cmdRefresh(args []string) error {
 	}
 
 	printSuccess("token refreshed for '%s'", resolved)
+	return nil
+}
+
+// cmdRefreshWithScopes refreshes the token with specific scopes (non-interactive).
+// Used by other commands (e.g. delete) when they need to auto-request a scope.
+func cmdRefreshWithScopes(scopes []string) error {
+	if !ghIsInstalled() {
+		return fmt.Errorf("gh CLI not installed")
+	}
+
+	printInfo("please complete the auth flow in your browser...")
+
+	if err := ghAuthRefresh(scopes...); err != nil {
+		return fmt.Errorf("gh auth refresh failed: %w", err)
+	}
+
+	// Get the new token
+	newToken, err := ghGetToken()
+	if err != nil {
+		return fmt.Errorf("cannot get new token: %w", err)
+	}
+
+	// Update the account
+	ghUser, _ := ghGetUser()
+	if ghUser == "" {
+		return nil
+	}
+
+	cfg, err := loadConfig()
+	if err != nil {
+		return err
+	}
+	resolved, err := resolveAlias(ghUser)
+	if err != nil {
+		return err
+	}
+	acc, ok := cfg.Accounts[resolved]
+	if !ok {
+		return nil
+	}
+	acc.Token = newToken
+	acc.TokenUpdatedAt = time.Now().Format("2006-01-02 15:04")
+	cfg.Accounts[resolved] = acc
+
+	if err := saveConfig(cfg); err != nil {
+		return err
+	}
+
+	printSuccess("token refreshed with new scopes")
 	return nil
 }
 

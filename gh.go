@@ -66,12 +66,17 @@ func ghLoginWithToken(token string) error {
 }
 
 // ghAuthRefresh refreshes the auth token for the current gh user.
-func ghAuthRefresh() error {
+// Optional scopes are passed as -s flags to gh auth refresh.
+func ghAuthRefresh(scopes ...string) error {
 	ghExe, err := gh.Path()
 	if err != nil {
 		return fmt.Errorf("gh CLI not found: %w", err)
 	}
-	cmd := exec.Command(ghExe, "auth", "refresh", "--hostname", "github.com")
+	cmdArgs := []string{"auth", "refresh", "--hostname", "github.com"}
+	for _, s := range scopes {
+		cmdArgs = append(cmdArgs, "-s", s)
+	}
+	cmd := exec.Command(ghExe, cmdArgs...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
