@@ -1,3 +1,20 @@
-ghs.exe
+# Build output
 ghs
+ghs.exe
+dist/
+
+# Old binary names
+ghswitch
+ghswitch.exe
+
+# Release artifacts
 *.zip
+*.tar.gz
+
+# Cross-compiled binaries
+*.exe
+ghs-darwin-*
+ghs-linux-*
+
+# Tailscale / system certs
+*.ts.net.*
