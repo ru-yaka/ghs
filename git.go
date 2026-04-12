@@ -53,11 +53,12 @@ func getCurrentUser() (name, email string, err error) {
 }
 
 func getCurrentBranch() (string, error) {
-	out, err := gitExec("rev-parse", "--abbrev-ref", "HEAD")
+	// symbolic-ref works even in empty repos (no commits yet)
+	out, err := gitExec("symbolic-ref", "--short", "HEAD")
 	if err != nil {
 		return "", fmt.Errorf("cannot get current branch: %w", err)
 	}
-	if out == "HEAD" {
+	if out == "" {
 		return "", fmt.Errorf("detached HEAD state")
 	}
 	return out, nil
