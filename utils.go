@@ -105,15 +105,12 @@ Usage:
   ghs clear                     Remove all accounts
   ghs use <name>                Switch git/gh to account
   ghs list                      List saved accounts
-  ghs repos [name]              List GitHub repos (all accounts or specific one)
-  ghs delete repos <repo...> [--yes]  Delete GitHub repos
   ghs delete users <user...> [--yes]  Remove saved accounts
   ghs whoami                    Show current git/gh identity
   ghs fix <repo> [name]         Rewrite commits + switch + push
                                  repo: URL, owner/repo, or "." for current dir
   ghs sync export              Export encrypted accounts (copy to other machine)
   ghs sync import              Import accounts from encrypted data
-  ghs refresh [name]           Refresh GitHub token (default: current gh user)
   ghs apply                     Sync gh user info (name, email) to git config
   ghs push [--public]           Push (auto-create repo if needed)
   ghs update [version]          Self-upgrade to latest (or specific version)

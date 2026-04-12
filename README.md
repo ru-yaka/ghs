@@ -11,12 +11,9 @@ CLI tool to switch between git identities (user.name, user.email) and GitHub acc
 | `ghs remove <name>` | Delete saved account |
 | `ghs use <name>` | Switch git + gh auth to this account |
 | `ghs list` | Show saved accounts |
-| `ghs repos [name]` | List GitHub repos (all or specific account) |
-| `ghs delete repos <repo...> [--yes]` | Delete GitHub repos |
 | `ghs delete users <user...> [--yes]` | Remove saved accounts |
 | `ghs whoami` | Show current git/gh identity + branch |
 | `ghs fix <repo> [name]` | Rewrite commits to correct author + push |
-| `ghs refresh [name]` | Refresh GitHub token |
 | `ghs sync export/import` | Sync accounts between machines |
 | `ghs push [--public]` | Push (auto-create repo if needed) |
 | `ghs update` | Self-upgrade to latest version |
@@ -46,19 +43,6 @@ ghs whoami           # shows: git: ru-yaka <...>
 ghs fix .            # current repo, default account
 ghs fix . ru         # current repo, ru-yaka account
 ghs fix owner/repo   # remote repo, default account
-```
-
-### List repos
-```bash
-ghs repos            # all accounts
-ghs repos ru         # specific account
-```
-
-### Delete repos
-```bash
-ghs delete repos test-repo              # delete by name (matches across accounts)
-ghs delete repos owner/repo             # delete by full name
-ghs delete repos repo1 repo2 --yes      # delete multiple, skip confirmation
 ```
 
 ### Delete saved users
