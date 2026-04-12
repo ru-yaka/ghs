@@ -6,7 +6,6 @@ CLI tool to switch between git identities (user.name, user.email) and GitHub acc
 
 | Command | Description |
 |---------|-------------|
-| `ghs add <name> [-e email] [-t token]` | Save account (auto-imports gh token if omitted) |
 | `ghs import [--force]` | Import all accounts from gh CLI |
 | `ghs remove <name>` | Delete saved account |
 | `ghs use <name>` | Switch git + gh auth to this account |

@@ -21,8 +21,6 @@ func main() {
 
 	var err error
 	switch cmd {
-	case "add":
-		err = cmdAdd(args)
 	case "remove", "rm":
 		err = cmdRemove(args)
 	case "clear":
@@ -62,22 +60,6 @@ func main() {
 		printError("%s", err)
 		os.Exit(1)
 	}
-}
-
-// cmdAdd handles: ghs add <alias> [-e email] [-t token]
-func cmdAdd(args []string) error {
-	alias, flagArgs := extractAlias(args)
-	if alias == "" {
-		fmt.Println("Usage: ghs add <alias> [-e email] [-t token]")
-		return fmt.Errorf("alias is required")
-	}
-
-	fs := flag.NewFlagSet("add", flag.ExitOnError)
-	email := fs.String("e", "", "Author email")
-	token := fs.String("t", "", "GitHub token")
-	fs.Parse(flagArgs)
-
-	return addAccount(alias, *email, *token)
 }
 
 // cmdRemove handles: ghs remove <alias>

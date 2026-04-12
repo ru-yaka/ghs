@@ -99,7 +99,6 @@ func printUsage() {
 	fmt.Printf(`ghs - Git & GitHub account switcher v%s
 
 Usage:
-  ghs add <name> [flags]        Add account (auto-imports gh token)
   ghs import [--force]          Import accounts from gh CLI
   ghs remove <name>             Remove saved account
   ghs clear                     Remove all accounts
@@ -119,10 +118,6 @@ Usage:
   ghs use ru-yaka    # full name
   ghs use ru         # fragment matches ru-yaka
 
-Flags for 'add':
-  -e, --email <email>          Author email (default: current git config)
-  -t, --token <token>          GitHub token (default: import from gh CLI)
-
 Flags for 'push':
   --public                     Create public repo (default: private)
 
@@ -134,17 +129,4 @@ Examples:
   ghs fix . ru                  # fix current repo with ru-yaka
   ghs fix owner/repo            # clone + fix repo with default account
 `, version)
-}
-
-// extractAlias separates the first non-flag argument from flags.
-// Supports both: `ghs add work -n Name` and `ghs add -n Name work`.
-func extractAlias(args []string) (string, []string) {
-	for i, arg := range args {
-		if !strings.HasPrefix(arg, "-") {
-			alias := arg
-			rest := append(args[:i:i], args[i+1:]...)
-			return alias, rest
-		}
-	}
-	return "", args
 }
