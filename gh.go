@@ -50,19 +50,86 @@ func ghGetUser() (string, error) {
 	return user, nil
 }
 
-// ghLoginWithToken switches gh auth by piping a token to gh auth login.
+// ghLoginWithToken switches gh auth by updating hosts.yml directly (no network).
+// Falls back to gh auth switch if direct update fails.
 func ghLoginWithToken(token string) error {
+	// Try direct config update first (no network request)
+	if err := ghSwitchUserDirect(token); err == nil {
+		return nil
+	}
+
+	// Fallback: use gh auth switch (local keyring operation, no API validation)
 	ghExe, err := gh.Path()
 	if err != nil {
 		return fmt.Errorf("gh CLI not found: %w", err)
 	}
-	cmd := exec.Command(ghExe, "auth", "login", "--with-token", "--hostname", "github.com")
-	cmd.Stdin = strings.NewReader(token)
+
+	// Find the user that owns this token from saved accounts
+	targetUser := findUserByToken(token)
+	if targetUser == "" {
+		return fmt.Errorf("token not found in saved accounts")
+	}
+
+	cmd := exec.Command(ghExe, "auth", "switch", "--user", targetUser)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("gh auth login failed: %s", strings.TrimSpace(string(out)))
+		return fmt.Errorf("gh auth switch failed: %s", strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// findUserByToken finds the gh username that owns the given token.
+func findUserByToken(token string) string {
+	cfg, _ := loadConfig()
+	for alias, acc := range cfg.Accounts {
+		if acc.Token == token {
+			if acc.GhUser != "" {
+				return acc.GhUser
+			}
+			return alias
+		}
+	}
+	return ""
+}
+
+// ghSwitchUserDirect switches gh auth by directly modifying hosts.yml.
+// This is a local-only operation with no network requests.
+func ghSwitchUserDirect(token string) error {
+	// Find the user that owns this token from saved accounts
+	targetUser := findUserByToken(token)
+	if targetUser == "" {
+		return fmt.Errorf("token not found in saved accounts")
+	}
+
+	cfgDir := ghconfig.ConfigDir()
+	hostsFile := filepath.Join(cfgDir, "hosts.yml")
+
+	data, err := os.ReadFile(hostsFile)
+	if err != nil {
+		return err
+	}
+
+	var hosts map[string]interface{}
+	if err := yaml.Unmarshal(data, &hosts); err != nil {
+		return err
+	}
+
+	entry, ok := hosts["github.com"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("github.com not found in hosts.yml")
+	}
+
+	// Update active user
+	entry["user"] = targetUser
+	hosts["github.com"] = entry
+
+	// Write back
+	newData, err := yaml.Marshal(hosts)
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(hostsFile, newData, 0600)
 }
 
 // ghExec runs a gh command and returns combined output.
