@@ -248,10 +248,15 @@ func filterRepoRewrite(mailmapPath string) error {
 		return err
 	}
 
-	cmd := exec.Command(filterRepo, "--mailmap", mailmapPath, "--force")
+	// Run git-filter-repo with python3 explicitly (more reliable than shebang)
+	cmd := exec.Command("python3", filterRepo, "--mailmap", mailmapPath, "--force")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("git-filter-repo failed: %s", strings.TrimSpace(string(out)))
+		errMsg := strings.TrimSpace(string(out))
+		if errMsg == "" {
+			errMsg = "git-filter-repo failed (ensure Python 3 is installed)"
+		}
+		return fmt.Errorf("git-filter-repo failed: %s", errMsg)
 	}
 	return nil
 }
