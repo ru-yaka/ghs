@@ -248,13 +248,23 @@ func filterRepoRewrite(mailmapPath string) error {
 		return err
 	}
 
-	// Run git-filter-repo with python3 explicitly (more reliable than shebang)
-	cmd := exec.Command("python3", filterRepo, "--mailmap", mailmapPath, "--force")
+	// Try python3 first, then python (Windows compatibility)
+	pythonExe := "python3"
+	if _, err := exec.LookPath(pythonExe); err != nil {
+		pythonExe = "python"
+	}
+
+	cmd := exec.Command(pythonExe, filterRepo, "--mailmap", mailmapPath, "--force")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		errMsg := strings.TrimSpace(string(out))
 		if errMsg == "" {
-			errMsg = "git-filter-repo failed (ensure Python 3 is installed)"
+			// Check if python exists
+			if _, perr := exec.LookPath(pythonExe); perr != nil {
+				errMsg = "python not found in PATH (required for git-filter-repo)"
+			} else {
+				errMsg = fmt.Sprintf("git-filter-repo exited with code %d (no output)", cmd.ProcessState.ExitCode())
+			}
 		}
 		return fmt.Errorf("git-filter-repo failed: %s", errMsg)
 	}
