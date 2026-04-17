@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -193,80 +191,4 @@ func getCommitCountOrZero() int {
 		return 0
 	}
 	return count
-}
-
-// ensureFilterRepo ensures git-filter-repo is available.
-// Checks PATH, then ~/.ghs/git-filter-repo, downloads standalone script if needed.
-func ensureFilterRepo() (string, error) {
-	// Check PATH first
-	if path, err := exec.LookPath("git-filter-repo"); err == nil {
-		return path, nil
-	}
-
-	// Check ~/.ghs/git-filter-repo
-	dir, _ := configDir()
-	localPath := filepath.Join(dir, "git-filter-repo")
-	if info, err := os.Stat(localPath); err == nil && !info.IsDir() {
-		return localPath, nil
-	}
-
-	// Download standalone script
-	printInfo("downloading git-filter-repo...")
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return "", fmt.Errorf("cannot create config dir: %w", err)
-	}
-
-	resp, err := http.Get("https://raw.githubusercontent.com/newren/git-filter-repo/main/git-filter-repo")
-	if err != nil {
-		return "", fmt.Errorf("cannot download git-filter-repo: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("download failed: HTTP %d", resp.StatusCode)
-	}
-
-	f, err := os.OpenFile(localPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
-	if err != nil {
-		return "", fmt.Errorf("cannot write git-filter-repo: %w", err)
-	}
-	defer f.Close()
-
-	if _, err := io.Copy(f, resp.Body); err != nil {
-		os.Remove(localPath)
-		return "", fmt.Errorf("download incomplete: %w", err)
-	}
-
-	printSuccess("downloaded git-filter-repo")
-	return localPath, nil
-}
-
-// filterRepoRewrite rewrites commit authors using git-filter-repo --mailmap.
-func filterRepoRewrite(mailmapPath string) error {
-	filterRepo, err := ensureFilterRepo()
-	if err != nil {
-		return err
-	}
-
-	// Try python3 first, then python (Windows compatibility)
-	pythonExe := "python3"
-	if _, err := exec.LookPath(pythonExe); err != nil {
-		pythonExe = "python"
-	}
-
-	cmd := exec.Command(pythonExe, filterRepo, "--mailmap", mailmapPath, "--force")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		errMsg := strings.TrimSpace(string(out))
-		if errMsg == "" {
-			// Check if python exists
-			if _, perr := exec.LookPath(pythonExe); perr != nil {
-				errMsg = "python not found in PATH (required for git-filter-repo)"
-			} else {
-				errMsg = fmt.Sprintf("git-filter-repo exited with code %d (no output)", cmd.ProcessState.ExitCode())
-			}
-		}
-		return fmt.Errorf("git-filter-repo failed: %s", errMsg)
-	}
-	return nil
 }
