@@ -119,8 +119,9 @@ func ghSwitchUserDirect(token string) error {
 		return fmt.Errorf("github.com not found in hosts.yml")
 	}
 
-	// Update active user
+	// Update active user and top-level oauth_token
 	entry["user"] = targetUser
+	entry["oauth_token"] = token
 	hosts["github.com"] = entry
 
 	// Write back
@@ -266,13 +267,20 @@ func ghImportHosts() ([]GhHostInfo, error) {
 			activeUser = v
 		}
 
-		// Collect all usernames from "users" field (new multi-account format)
+		// Collect all usernames and their tokens from "users" field
 		var usernames []string
+		userTokens := make(map[string]string)
 		if usersRaw, ok := entry["users"]; ok {
 			switch v := usersRaw.(type) {
 			case map[string]interface{}:
-				for u := range v {
+				for u, info := range v {
 					usernames = append(usernames, u)
+					// Extract token directly from users map
+					if userInfo, ok := info.(map[string]interface{}); ok {
+						if t, ok := userInfo["oauth_token"].(string); ok && t != "" {
+							userTokens[u] = t
+						}
+					}
 				}
 			case []interface{}:
 				for _, u := range v {
@@ -298,22 +306,22 @@ func ghImportHosts() ([]GhHostInfo, error) {
 			usernames = []string{activeUser}
 		}
 
-		// Get active user's token (no switch needed)
-		activeToken, _ := auth.TokenForHost(host)
-
-		switched := false
+		// Get tokens for each user
 		for _, user := range usernames {
 			if user == "" {
 				continue
 			}
 			var token string
-			if user == activeUser {
-				token = activeToken
+			// First try token from users map (most reliable)
+			if t, ok := userTokens[user]; ok && t != "" {
+				token = t
+			} else if user == activeUser {
+				// Active user: get from auth.TokenForHost
+				token, _ = auth.TokenForHost(host)
 			} else {
-				// Temporarily switch to get this user's token from keyring
+				// Non-active user: switch and get token
 				if _, err := ghExec("auth", "switch", "--user", user); err == nil {
 					token, _ = auth.TokenForHost(host)
-					switched = true
 				}
 			}
 			if token != "" {
@@ -321,8 +329,8 @@ func ghImportHosts() ([]GhHostInfo, error) {
 			}
 		}
 
-		// Restore original active user if we switched
-		if switched && activeUser != "" {
+		// Restore original active user
+		if activeUser != "" {
 			ghExec("auth", "switch", "--user", activeUser)
 		}
 	}
