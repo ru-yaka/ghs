@@ -517,6 +517,12 @@ func fixInPlace(alias string, acc *Account) error {
 		printInfo("force pushing to %s...", upstream)
 		_, err = gitExec("push", "--force", "origin", branch)
 		if err != nil {
+			errStr := err.Error()
+			if strings.Contains(errStr, "not found") || strings.Contains(errStr, "Repository not found") {
+				printError("no access to this repo with current account")
+				printInfo("repo may be private or owned by another account")
+				printInfo("switch to the repo owner and try: ghs fix .")
+			}
 			return fmt.Errorf("force push failed: %s", err)
 		}
 		printSuccess("pushed to %s", upstream)
