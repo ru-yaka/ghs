@@ -221,7 +221,8 @@ func listAccounts() error {
 			}
 		}
 		line := fmt.Sprintf("  %-12s <%s>  [%s]", alias, acc.Email, tokenStatus)
-		if acc.GhUser != "" {
+		// Only show gh: if there's a token
+		if acc.Token != "" && acc.GhUser != "" {
 			line += fmt.Sprintf("  gh:%s", acc.GhUser)
 		}
 		fmt.Println(line)
