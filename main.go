@@ -23,6 +23,8 @@ func main() {
 	switch cmd {
 	case "remove", "rm":
 		err = cmdRemove(args)
+	case "add":
+		err = cmdAdd(args)
 	case "clear":
 		err = cmdClear(args)
 	case "use", "switch":
@@ -70,6 +72,67 @@ func cmdRemove(args []string) error {
 		return fmt.Errorf("usage: ghs remove <alias>")
 	}
 	return removeAccount(args[0])
+}
+
+// cmdAdd handles: ghs add <name> [-e email] [-t token]
+func cmdAdd(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: ghs add <name> [-e email] [-t token]")
+	}
+
+	name := args[0]
+	email := ""
+	token := ""
+
+	// Parse flags
+	for i := 1; i < len(args); i++ {
+		if args[i] == "-e" || args[i] == "--email" {
+			if i+1 < len(args) {
+				email = args[i+1]
+				i++
+			}
+		} else if args[i] == "-t" || args[i] == "--token" {
+			if i+1 < len(args) {
+				token = args[i+1]
+				i++
+			}
+		}
+	}
+
+	// Load existing config
+	cfg, _ := loadConfig()
+	if cfg.Accounts == nil {
+		cfg.Accounts = make(map[string]Account)
+	}
+
+	// Check if account exists
+	if _, exists := cfg.Accounts[name]; exists {
+		// Update existing account
+		acc := cfg.Accounts[name]
+		if email != "" {
+			acc.Email = email
+		}
+		if token != "" {
+			acc.Token = token
+		}
+		cfg.Accounts[name] = acc
+		printInfo("updated account '%s'", name)
+	} else {
+		// Create new account
+		acc := Account{
+			Email:  email,
+			Token:  token,
+			GhUser: name,
+		}
+		cfg.Accounts[name] = acc
+		printSuccess("added account '%s'", name)
+	}
+
+	if email == "" {
+		printInfo("set email with: ghs add %s -e your@email.com", name)
+	}
+
+	return saveConfig(cfg)
 }
 
 // cmdClear handles: ghs clear

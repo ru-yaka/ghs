@@ -100,6 +100,7 @@ func printUsage() {
 
 Usage:
   ghs import [--force]          Import accounts from gh CLI
+  ghs add <name> [-e email] [-t token]  Add or update account
   ghs remove <name>             Remove saved account
   ghs clear                     Remove all accounts
   ghs use <name>                Switch git + gh auth to account
@@ -124,6 +125,7 @@ Flags for 'push':
 
 Examples:
   ghs import                    # import all gh CLI accounts
+  ghs add myuser -e my@email.com  # add git-only account
   ghs use ru                    # switch to ru-yaka (fragment match)
   ghs git ru                    # switch git identity only
   ghs apply                     # sync current gh user info to git
