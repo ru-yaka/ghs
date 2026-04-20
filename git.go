@@ -118,10 +118,13 @@ func stageAll() error {
 	return err
 }
 
-func push(remote, branch string, setUpstream bool) error {
+func push(remote, branch string, setUpstream, force bool) error {
 	args := []string{"push"}
 	if setUpstream {
 		args = append(args, "-u")
+	}
+	if force {
+		args = append(args, "--force")
 	}
 	args = append(args, remote, branch)
 	_, err := gitExec(args...)

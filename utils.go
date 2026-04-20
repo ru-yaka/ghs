@@ -102,7 +102,8 @@ Usage:
   ghs import [--force]          Import accounts from gh CLI
   ghs remove <name>             Remove saved account
   ghs clear                     Remove all accounts
-  ghs use <name>                Switch git/gh to account
+  ghs use <name>                Switch git + gh auth to account
+  ghs git <name>                Switch git identity only (not gh auth)
   ghs list                      List saved accounts
   ghs delete users <user...> [--yes]  Remove saved accounts
   ghs whoami                    Show current git/gh identity
@@ -124,6 +125,7 @@ Flags for 'push':
 Examples:
   ghs import                    # import all gh CLI accounts
   ghs use ru                    # switch to ru-yaka (fragment match)
+  ghs git ru                    # switch git identity only
   ghs apply                     # sync current gh user info to git
   ghs fix .                     # fix current repo with default account
   ghs fix . ru                  # fix current repo with ru-yaka
