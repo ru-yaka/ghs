@@ -10,7 +10,7 @@ CLI tool to switch between git identities (user.name, user.email) and GitHub acc
 | `ghs add <name> [-e email] [-t token]` | Add or update account |
 | `ghs remove <name>` | Delete saved account |
 | `ghs use <name>` | Switch git + gh auth to this account |
-| `ghs git <name>` | Switch git identity only (not gh auth) |
+| `ghs use git:<name>` | Switch git identity only (not gh auth) |
 | `ghs list` | Show saved accounts |
 | `ghs delete users <user...> [--yes]` | Remove saved accounts |
 | `ghs whoami` | Show current git/gh identity + branch |

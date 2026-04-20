@@ -104,7 +104,7 @@ Usage:
   ghs remove <name>             Remove saved account
   ghs clear                     Remove all accounts
   ghs use <name>                Switch git + gh auth to account
-  ghs git <name>                Switch git identity only (not gh auth)
+  ghs use git:<name>            Switch git identity only (not gh auth)
   ghs list                      List saved accounts
   ghs delete users <user...> [--yes]  Remove saved accounts
   ghs whoami                    Show current git/gh identity
@@ -119,6 +119,7 @@ Usage:
 <name> is the GitHub username or a unique fragment for quick matching.
   ghs use ru-yaka    # full name
   ghs use ru         # fragment matches ru-yaka
+  ghs use git:ru     # switch git only, not gh auth
 
 Flags for 'push':
   --public                     Create public repo (default: private)
@@ -127,7 +128,7 @@ Examples:
   ghs import                    # import all gh CLI accounts
   ghs add myuser -e my@email.com  # add git-only account
   ghs use ru                    # switch to ru-yaka (fragment match)
-  ghs git ru                    # switch git identity only
+  ghs use git:ru                # switch git identity only
   ghs apply                     # sync current gh user info to git
   ghs fix .                     # fix current repo with default account
   ghs fix . ru                  # fix current repo with ru-yaka

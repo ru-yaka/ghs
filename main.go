@@ -29,8 +29,6 @@ func main() {
 		err = cmdClear(args)
 	case "use", "switch":
 		err = cmdUse(args)
-	case "git":
-		err = cmdGit(args)
 	case "list", "ls":
 		err = listAccounts()
 	case "delete":
@@ -219,53 +217,19 @@ func cmdApply(args []string) error {
 	return nil
 }
 
-// cmdGit handles: ghs git <alias>
-// Switches only git identity (user.name, user.email), not gh auth.
-func cmdGit(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("usage: ghs git <alias>")
-	}
-	alias := args[0]
-
-	resolved, err := resolveAlias(alias)
-	if err != nil {
-		return err
-	}
-
-	acc, err := getAccount(alias)
-	if err != nil {
-		return err
-	}
-
-	// Use GitHub username as git user.name (not the alias)
-	gitUserName := acc.GhUser
-	if gitUserName == "" {
-		gitUserName = resolved
-	}
-
-	// Switch git user only
-	if err := gitConfigSet("user.name", gitUserName); err != nil {
-		return fmt.Errorf("failed to set git user.name: %w", err)
-	}
-	if err := gitConfigSet("user.email", acc.Email); err != nil {
-		return fmt.Errorf("failed to set git user.email: %w", err)
-	}
-	printSuccess("git → %s <%s>", gitUserName, acc.Email)
-
-	// Remember for this repo
-	if err := setRepoAccount(gitUserName); err == nil {
-		printInfo("'%s' set as default for this repository", gitUserName)
-	}
-
-	return nil
-}
-
-// cmdUse handles: ghs use <alias>
+// cmdUse handles: ghs use <alias> or ghs use git:<alias>
 func cmdUse(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: ghs use <alias>")
+		return fmt.Errorf("usage: ghs use <alias>\n       ghs use git:<alias>  (git only, no gh auth)")
 	}
 	alias := args[0]
+
+	// Check for git: prefix (switch git only, not gh auth)
+	gitOnly := false
+	if strings.HasPrefix(alias, "git:") {
+		gitOnly = true
+		alias = strings.TrimPrefix(alias, "git:")
+	}
 
 	resolved, err := resolveAlias(alias)
 	if err != nil {
@@ -292,8 +256,8 @@ func cmdUse(args []string) error {
 	}
 	printSuccess("git → %s <%s>", gitUserName, acc.Email)
 
-	// Switch gh auth if token available
-	if acc.Token != "" {
+	// Switch gh auth if not git-only and token available
+	if !gitOnly && acc.Token != "" {
 		if ghIsInstalled() {
 			if err := ghLoginWithToken(acc.Token); err != nil {
 				printError("gh auth switch failed: %s", err)
