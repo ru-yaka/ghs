@@ -30,6 +30,11 @@ func gitConfigSet(key, value string) error {
 	return err
 }
 
+func gitConfigSetLocal(key, value string) error {
+	_, err := gitExec("config", "--local", key, value)
+	return err
+}
+
 func gitConfigGet(key string) (string, error) {
 	out, err := gitExec("config", "--global", "--get", key)
 	if err != nil {

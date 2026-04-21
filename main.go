@@ -247,12 +247,17 @@ func cmdUse(args []string) error {
 		gitUserName = resolved
 	}
 
-	// Switch git user
+	// Switch git user (global + local if in a repo)
 	if err := gitConfigSet("user.name", gitUserName); err != nil {
 		return fmt.Errorf("failed to set git user.name: %w", err)
 	}
 	if err := gitConfigSet("user.email", acc.Email); err != nil {
 		return fmt.Errorf("failed to set git user.email: %w", err)
+	}
+	// Also set local config if inside a repo (local overrides global)
+	if isGitRepo() {
+		_ = gitConfigSetLocal("user.name", gitUserName)
+		_ = gitConfigSetLocal("user.email", acc.Email)
 	}
 	printSuccess("git → %s <%s>", gitUserName, acc.Email)
 
