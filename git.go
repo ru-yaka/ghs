@@ -31,7 +31,7 @@ func gitConfigSet(key, value string) error {
 }
 
 func gitConfigGet(key string) (string, error) {
-	out, err := gitExec("config", "--get", key)
+	out, err := gitExec("config", "--global", "--get", key)
 	if err != nil {
 		return "", fmt.Errorf("git config %s not set", key)
 	}
